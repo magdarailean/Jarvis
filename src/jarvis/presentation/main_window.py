@@ -1,7 +1,7 @@
-"""Romanian shell. No screen capture, microphone or AI services are active here."""
+"""Romanian shell; feature actions are emitted to the composition root."""
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QPixmap
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
     QSizePolicy, QVBoxLayout, QWidget,
@@ -40,6 +40,8 @@ class MainWindow(QWidget):
     hidden_to_tray = Signal()
     overlay_demo_requested = Signal()
     overlay_clear_requested = Signal()
+    capture_requested = Signal()
+    capture_clear_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -92,11 +94,33 @@ class MainWindow(QWidget):
         privacy_layout.setSpacing(7)
         privacy_layout.addWidget(text("Tu alegi când începe asistența", "Strong"))
         privacy_layout.addWidget(text(
-            "Acum microfonul este oprit, ecranul nu este capturat și nu se trimite "
-            "nimic către servicii AI."
+            "Microfonul este oprit. Ecranul este capturat o singură dată, doar când "
+            "apeși butonul de captură. Imaginea rămâne temporar în memorie; "
+            "nu este salvată pe disc și nu se trimite către servicii AI."
         ))
         card_layout.addWidget(privacy)
         body.addWidget(card)
+        body.addWidget(text("Context de ecran · Captură unică", "Strong"))
+        body.addWidget(text(
+            "Se capturează monitorul acestei ferestre după 3 secunde. Jarvis și adnotările "
+            "se ascund temporar. Poți schimba aplicația în acest timp; redeschiderea "
+            "Jarvis anulează captura. O captură nouă înlocuiește imaginea veche.", "Muted"
+        ))
+        self.capture_button = QPushButton("Capturează peste 3 secunde")
+        self.capture_button.clicked.connect(self.capture_requested.emit)
+        self.capture_clear_button = QPushButton("Eliberează captura")
+        self.capture_clear_button.setEnabled(False)
+        self.capture_clear_button.clicked.connect(self.capture_clear_requested.emit)
+        body.addWidget(self.capture_button)
+        body.addWidget(self.capture_clear_button)
+        self.capture_feedback = text("Nicio captură în memorie.", "Muted")
+        body.addWidget(self.capture_feedback)
+        self.capture_preview = QLabel()
+        self.capture_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.capture_preview.setFixedHeight(180)
+        self.capture_preview.setAccessibleName("Previzualizarea capturii temporare")
+        self.capture_preview.hide()
+        body.addWidget(self.capture_preview)
         body.addWidget(text("Adnotări pe ecran · Demonstrație", "Strong"))
         body.addWidget(text(
             "Arată forme și un pas numerotat pe monitorul acestei ferestre. "
@@ -137,6 +161,25 @@ class MainWindow(QWidget):
 
         screen = self.screen().availableGeometry()
         self.move(screen.center() - self.rect().center())
+
+    def show_capture(self, frame) -> None:
+        self.capture_preview.clear()
+        self.capture_preview.hide()
+        self.capture_clear_button.setEnabled(frame is not None)
+        if frame is None:
+            self.capture_feedback.setText("Nicio captură în memorie.")
+            return
+        pixmap = QPixmap()
+        pixmap.loadFromData(frame.png, "PNG")
+        self.capture_preview.setPixmap(pixmap.scaled(
+            300, 180, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        ))
+        self.capture_preview.show()
+        geometry = frame.geometry
+        self.capture_feedback.setText(
+            f"Captură în memorie: {geometry.pixel_width} × {geometry.pixel_height} pixeli. "
+            "Previzualizare redusă; nu se actualizează automat."
+        )
 
     def enable_background_mode(self) -> None:
         self._background_enabled = True

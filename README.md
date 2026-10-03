@@ -2,7 +2,7 @@
 
 A Windows desktop assistant and tutor for Romanian-speaking users, primarily in Moldova.
 
-**Current state: Part 2, screen overlay foundation.** The Romanian shell, tray, single-instance activation and explicit exit work. A transparent overlay now draws persistent shapes and labels over one monitor, with demo/clear controls. AI, voice, screen capture, shortcuts and conversations are not implemented yet. Idle operation records nothing and makes no network requests.
+**Current state: Part 3, one-shot screen capture.** The Romanian shell, tray, single-instance activation, persistent overlay and explicit exit work. Explicit capture stores one monitor image temporarily in memory, with preview and release controls. AI, voice, shortcuts and conversations are not implemented yet. Idle operation records nothing and makes no network requests.
 
 ## Prerequisites
 
@@ -63,6 +63,17 @@ If the tray is unavailable or initialization fails, hiding is disabled, a Romani
 
 The demo captures no screen/audio and sends no requests. Marks stay fixed when underlying content scrolls or changes; clear them yourself. This foundation targets ordinary desktop windows, not the Windows secure desktop or exclusive fullscreen applications. Physical click-through and mixed-monitor DPI behavior remain manual release checks.
 
+## Screen capture review (Part 3)
+
+1. Place Jarvis on the monitor you want captured. Scroll to **Capturează peste 3 secunde** and click it. That monitor is selected at activation, even if the pointer moves elsewhere.
+2. Jarvis and its overlay hide for three seconds. Switch to the desired application if needed. The tray tooltip reports the pending capture. Reopening Jarvis before the delay ends cancels it.
+3. Jarvis returns with a reduced preview and the full image's pixel dimensions. The original PNG and monitor geometry remain only in memory. Nothing is sent to AI or saved to disk.
+4. Change the underlying content: the preview must stay unchanged. Capture again to replace it, or click **Eliberează captura** to discard it and the preview.
+5. Repeat while demo annotations are visible: they should be absent from the captured image and reappear afterward. Exit during the delay: no late capture or reopened window should occur.
+6. If available, repeat on a second monitor and at fractional Windows scaling. A target-monitor geometry/DPI change or removal discards its stored image and cancels a pending capture.
+
+The image includes everything visible on the selected monitor, including other applications and the taskbar. Capture does not follow scrolling, detect protected/black content, or guarantee secure-desktop/exclusive-fullscreen support. Captures are capped at 40 million pixels. Releasing an image drops application references; it is not a secure-memory erasure guarantee. This explicit button is a development activation path until push-to-talk is integrated.
+
 ## Build and test
 
 Python source needs no application compilation. Validate syntax, dependencies and lifecycle:
@@ -75,7 +86,7 @@ Python source needs no application compilation. Validate syntax, dependencies an
 
 Run tests on an unlocked Windows desktop. They briefly open real Qt windows/tray icons and test widget mouse/keyboard events, native tray action callbacks, duplicate child processes, shutdown/restart, simulated tray failure, abrupt child termination, logging failure and log size limits. Close an existing Jarvis first to include the installed-launcher test; other tests use unique instance names. Only test-created child processes are terminated. The suite uses standard-library `unittest` and QtTest, with no separate test framework.
 
-Tests write app-only window renders to ignored `.artifacts/`. They do not capture the desktop. Physical taskbar tray clicks, Windows logoff and Explorer restart still require manual checks.
+Tests write app-only window renders to ignored `.artifacts/`. Capture tests use synthetic pixmaps and an injected capture adapter; they do not capture the desktop. Real screen acquisition, compositor timing, mixed-monitor alignment, physical taskbar tray clicks, Windows logoff and Explorer restart still require manual checks.
 
 Build a distributable Python wheel (not a standalone Windows installer):
 
@@ -102,6 +113,7 @@ src/jarvis/
   app.py                         # Composition and desktop lifetime
   presentation/main_window.py    # Romanian Qt widgets and UI signals
   features/overlay/              # Validated annotations, Qt renderer, static demo
+  features/screen_capture/       # One-shot capture, memory ownership, coordinate mapping
   infrastructure/
     single_instance.py          # Windows mutex/event boundary
     tray.py                     # Tray menu/icon adapter

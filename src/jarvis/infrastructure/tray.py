@@ -46,6 +46,10 @@ class TrayIcon:
         )
         self.icon.show()
 
+    def set_status(self, status: str) -> None:
+        self.status_action.setText(f"{status} · Microfon oprit")
+        self.icon.setToolTip(f"Jarvis — {status} · Microfon oprit")
+
     def close(self) -> None:
         self.icon.hide()
         self.icon.deleteLater()
