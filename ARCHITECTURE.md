@@ -39,6 +39,18 @@ Shared production files changed in Part 2: `app.py` and `presentation/main_windo
 
 Shared production files changed in Part 3: `app.py`, `presentation/main_window.py`, and `infrastructure/tray.py` (status setter only). The overlay package is unchanged. Automated tests use synthetic image data; actual capture and compositor exclusion timing remain manual Windows review checks.
 
+## Tutoring session and typed fallback (Part 4)
+
+- `features/session/model.py` is framework-independent and performs no I/O. `Session` owns a session identity, selected `AssistantMode`, bounded completed turns, latest screen reference and at most one pending `TutorRequest`. Request snapshots include the question, mode, successful history, current image and immutable annotations. Old turns retain only a frame ID, never old screenshot bytes.
+- `begin` validates the question/annotation snapshot and returns a unique request ID. `complete` accepts bounded explanation text only for that pending ID. `fail` records a local service notice separately from an assistant explanation. Failed turns remain visible for review but are omitted from future AI context. Duplicate/late completions return false; replacing/releasing a frame or ending a session invalidates the pending request.
+- Retain at most 12 whole turns and 96,000 total text characters, evicting oldest whole turns. Question length is capped at 2,000, explanations at 12,000 and service notices at 500 characters. This is a deterministic text budget, not a model-specific token budget; provider integration will need its own context limit.
+- `features/session/panel.py` owns only typed UI, mode selection and plain-text conversation rendering. No Markdown/HTML execution, network access or microphone code. Domain state is composed in `app.py`; provider-unavailable submissions are explicitly local failures. There is no placeholder AI that produces fake explanations.
+- Capture changes update the session's latest image reference. Submission snapshots overlay annotations only when their logical monitor bounds match the captured context. Mode changes affect future submissions, not previous turns. The mode selector expresses intent until a real provider is connected.
+- End Session resets session identity/history/mode, clears draft/UI, cancels pending capture and releases capture/preview/overlay state. Exit does the same without reopening the shell. Hide/reopen retains the session. Clearing only the capture releases its image while retaining textual conversation history.
+- These are state/model guarantees, not transport cancellation: no provider or worker exists yet. A future adapter must perform I/O off the UI thread, cancel/timeout work and discard results rejected by the request identity check; it must also release its own request snapshots.
+
+Shared production files changed in Part 4: `app.py` and `presentation/main_window.py`. New files are confined to `features/session`, its tests and documentation. No STT, capture or overlay implementation changes and no added dependencies.
+
 ## Current lifecycle
 
 Launch -> per-user/per-login-session mutex -> native tray + Romanian window -> Ascunde/X hides -> tray double-click / Deschide Jarvis / duplicate launch reopens -> Ieșire disposes resources and quits.
@@ -53,7 +65,7 @@ Lifecycle events and error types go to `%LOCALAPPDATA%\Jarvis\logs\application.l
 
 Hold Ctrl+Shift+Space -> interrupt speech -> listening indicator -> one relevant screen capture + bounded recording -> release -> Romanian STT -> session + screenshot + annotation snapshot -> local AI -> validated structured result -> persistent overlay actions + Romanian text/TTS.
 
-First planned provider remains local Ollama + Gemma 3 4B via HTTP/JSON. The inspected machine has about 32 GB RAM and AMD 880M integrated graphics. CPU latency and Romanian/math quality require evaluation in milestone 5. Local inference avoids API charges and cloud screenshot uploads; do not add a second provider before the first works. [Model reference](https://ollama.com/library/gemma3).
+First planned provider remains local Ollama + Gemma 3 4B via HTTP/JSON. Part 4 found no Ollama command on PATH or executable in its usual per-user installation location; no runtime/model was installed. The earlier hardware note recorded about 32 GB RAM and AMD 880M integrated graphics; verify runtime availability and performance before provider integration. Romanian/math quality remains unmeasured. [Model reference](https://ollama.com/library/gemma3).
 
 Speech-to-Text implementation and library selection belong to the teammate. Use their interface or typed input during development. TTS remains a separate future feature; the earlier local Piper idea still needs license and Romanian voice-quality evaluation. No voice packages are installed here.
 

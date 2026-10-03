@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
     QSizePolicy, QVBoxLayout, QWidget,
 )
 
+from jarvis.features.session.panel import SessionPanel
+
 STYLE = """
 QWidget { font-family: 'Segoe UI'; font-size: 15px; color: #172b43; }
 QWidget#MainWindow { background: #f3f6fa; }
@@ -100,6 +102,8 @@ class MainWindow(QWidget):
         ))
         card_layout.addWidget(privacy)
         body.addWidget(card)
+        self.session_panel = SessionPanel()
+        body.addWidget(self.session_panel)
         body.addWidget(text("Context de ecran · Captură unică", "Strong"))
         body.addWidget(text(
             "Se capturează monitorul acestei ferestre după 3 secunde. Jarvis și adnotările "
@@ -125,7 +129,7 @@ class MainWindow(QWidget):
         body.addWidget(text(
             "Arată forme și un pas numerotat pe monitorul acestei ferestre. "
             "Poți apăsa și scrie în aplicațiile de sub adnotări. Formele sunt exemple fixe; "
-            "conversațiile, comanda rapidă și explicațiile vocale nu sunt disponibile încă.", "Muted"
+            "răspunsurile AI, comanda rapidă și explicațiile vocale nu sunt disponibile încă.", "Muted"
         ))
         self.overlay_demo_button = QPushButton("Arată demonstrația")
         self.overlay_demo_button.clicked.connect(self.overlay_demo_requested.emit)

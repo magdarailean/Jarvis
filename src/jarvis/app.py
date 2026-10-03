@@ -13,6 +13,7 @@ from jarvis.presentation.main_window import MainWindow
 from jarvis.features.overlay.demo import demo_annotations
 from jarvis.features.overlay.window import OverlayWindow
 from jarvis.features.screen_capture.session import CaptureSession
+from jarvis.features.session import Session
 
 
 class DesktopController(QObject):
@@ -29,6 +30,7 @@ class DesktopController(QObject):
         self.tray: TrayIcon | None = None
         self.instance: SingleInstance | None = None
         self.overlay: OverlayWindow | None = None
+        self.session = Session()
         self.capture = CaptureSession(self)
         self.capture.frame_changed.connect(self._capture_changed)
         self.capture.finished.connect(self._capture_finished)
@@ -43,7 +45,7 @@ class DesktopController(QObject):
         app.commitDataRequest.connect(self.request_exit)
 
     def start(self) -> bool:
-        self.log.write("Application starting; feature=screen_capture; runtime=python; capture=idle; microphone=false.")
+        self.log.write("Application starting; feature=session; runtime=python; capture=idle; microphone=false.")
         try:
             self.instance = SingleInstance(self.instance_key)
             if not self.instance.is_primary:
@@ -66,6 +68,9 @@ class DesktopController(QObject):
         self.window.overlay_clear_requested.connect(self.clear_overlay)
         self.window.capture_requested.connect(self.start_capture)
         self.window.capture_clear_requested.connect(self.capture.clear)
+        self.window.session_panel.question_submitted.connect(self.submit_question)
+        self.window.session_panel.end_requested.connect(self.end_session)
+        self.window.session_panel.mode_changed.connect(self._session_mode_changed)
         self.window.hidden_to_tray.connect(
             lambda: self.log.write("Main window hidden; tray remains active.")
         )
@@ -81,6 +86,49 @@ class DesktopController(QObject):
         self.log.write("Main window loaded; state=Ready.")
         self.instance.listen(self.activation_requested.emit)
         return True
+
+    def _session_mode_changed(self, mode) -> None:
+        self.session.mode = mode
+
+    @Slot(str)
+    def submit_question(self, question: str) -> None:
+        if self._closed or self.window is None:
+            return
+        panel = self.window.session_panel
+        if self.capture.pending:
+            panel.feedback.setText("Așteaptă finalizarea capturii înainte de a trimite întrebarea.")
+            return
+        annotations = ()
+        frame = self.session.frame
+        if frame is not None and self.overlay is not None:
+            geometry = frame.geometry
+            if self.overlay.geometry().getRect() == (
+                geometry.left, geometry.top, geometry.logical_width, geometry.logical_height
+            ):
+                annotations = self.overlay.annotations
+        try:
+            request = self.session.begin(question, annotations)
+        except (ValueError, RuntimeError) as error:
+            # Validation messages are local, never provider exception details.
+            panel.feedback.setText(str(error))
+            return
+        self.log.write("Typed interaction submitted; provider=unavailable.")
+        self.session.fail(request.id, "AI nu este conectat încă. Întrebarea nu a fost trimisă unui serviciu AI.")
+        panel.question.clear()
+        panel.render(self.session)
+        panel.feedback.setText("AI indisponibil · Întrebarea este păstrată doar în sesiunea curentă.")
+
+    @Slot()
+    def end_session(self) -> None:
+        if self._closed:
+            return
+        self.session.end()
+        self.clear_overlay()
+        self.capture.clear()
+        if self.window is not None:
+            self.window.session_panel.reset(self.session)
+        self._set_capture_status("Gata")
+        self.log.write("Tutoring session ended; temporary context released.")
 
     @Slot()
     def start_capture(self) -> None:
@@ -108,6 +156,7 @@ class DesktopController(QObject):
             self.tray.set_status(status)
 
     def _capture_changed(self, frame) -> None:
+        self.session.set_frame(frame)
         if self.window is not None:
             self.window.show_capture(frame)
         self.log.write("Screen context acquired." if frame is not None else "Screen context released.")
@@ -190,9 +239,11 @@ class DesktopController(QObject):
         if self._closed:
             return
         self._closed = True
+        self.session.end()
         self.capture.clear(notify_finished=False)
         self.clear_overlay()
         if self.window is not None:
+            self.window.session_panel.reset(self.session)
             self.window.prepare_exit()
             self.window.close()
         if self.tray is not None:

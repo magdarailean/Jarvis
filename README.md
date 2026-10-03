@@ -2,7 +2,7 @@
 
 A Windows desktop assistant and tutor for Romanian-speaking users, primarily in Moldova.
 
-**Current state: Part 3, one-shot screen capture.** The Romanian shell, tray, single-instance activation, persistent overlay and explicit exit work. Explicit capture stores one monitor image temporarily in memory, with preview and release controls. AI, voice, shortcuts and conversations are not implemented yet. Idle operation records nothing and makes no network requests.
+**Current state: Part 4, bounded session and typed fallback.** The desktop shell, persistent overlay, one-shot capture and temporary conversation state work. You can enter questions, choose an assistance mode and end/clear the session. **AI is not connected yet:** submissions show an explicit service-unavailable notice, not generated answers. Voice and shortcuts are not implemented. Idle operation records nothing and makes no network requests.
 
 ## Prerequisites
 
@@ -74,6 +74,16 @@ The demo captures no screen/audio and sends no requests. Marks stay fixed when u
 
 The image includes everything visible on the selected monitor, including other applications and the taskbar. Capture does not follow scrolling, detect protected/black content, or guarantee secure-desktop/exclusive-fullscreen support. Captures are capped at 40 million pixels. Releasing an image drops application references; it is not a secure-memory erasure guarantee. This explicit button is a development activation path until push-to-talk is integrated.
 
+## Session review (Part 4)
+
+1. Scroll to **Conversație · Introducere prin text**, select a mode, type a Romanian question, and press Enter or **Trimite întrebarea**. Blank questions show validation feedback without adding a turn.
+2. The question appears with its mode and whether a capture was available. **Stare serviciu** explicitly says AI is not connected. No request is sent, no answer is fabricated, and the mode currently records intent only.
+3. Hide/reopen Jarvis. The current conversation remains. Submit another question; at most 12 complete exchanges are retained (also bounded by total text size).
+4. Optionally take a capture and show demo annotations. **Încheie sesiunea** clears the conversation, unsent draft, capture/preview, annotations and pending capture; it resets the assistance mode. You can start again without restarting Jarvis.
+5. Exit/relaunch. No conversation or images should return. Session history is memory-only and question text is excluded from diagnostic logs.
+
+This prepares follow-up context and reply identity checks for the future provider. Actual understanding of follow-up questions requires that provider; the current application cannot answer questions yet.
+
 ## Build and test
 
 Python source needs no application compilation. Validate syntax, dependencies and lifecycle:
@@ -114,6 +124,7 @@ src/jarvis/
   presentation/main_window.py    # Romanian Qt widgets and UI signals
   features/overlay/              # Validated annotations, Qt renderer, static demo
   features/screen_capture/       # One-shot capture, memory ownership, coordinate mapping
+  features/session/              # Bounded conversation state and typed fallback panel
   infrastructure/
     single_instance.py          # Windows mutex/event boundary
     tray.py                     # Tray menu/icon adapter

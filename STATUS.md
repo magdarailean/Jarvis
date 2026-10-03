@@ -1,28 +1,28 @@
 # Current Part
 
-**Part 3 — One-shot screen capture.** Ready for manual desktop review and commit. Development stops here until the user writes `continue`. No commits created.
+**Part 4 — Bounded tutoring session and typed fallback.** Ready for manual review and commit. Stop here until the user writes `continue`. No commits created.
 
-Started from clean commit `b2f21ad` (overlay). Speech-to-Text remains owned by the teammate and untouched.
+Started from clean commit `d73381e` (screen capture). No Ollama command was found on PATH or executable at its usual per-user install location. This part implements the session prerequisite and an honest typed fallback; it does not install a model or connect an AI provider. Speech-to-Text remains owned by the teammate and untouched.
 
 # Working
 
-- Existing Python/PySide6 shell, tray/background lifecycle, single instance and persistent annotation overlay.
-- Isolated `features/screen_capture` package: memory-only PNG, unique frame ID, timestamp, monitor bounds, logical/pixel dimensions and DPI ratio.
-- Explicit **Capturează peste 3 secunde** activation; the target is the monitor containing Jarvis when pressed. No idle capture or microphone/network activity.
-- Shell and annotations hide during the delay, then return with a reduced preview. Annotation contents are preserved. Reopening Jarvis while waiting cancels acquisition.
-- Exactly one owned frame. A new request releases the old image; **Eliberează captura**, display geometry/DPI changes, monitor removal and exit release image/preview references.
-- Pixel-to-normalized and normalized-to-logical-desktop mapping, including negative monitor origins and fractional DPI.
-- Romanian failure feedback, tray/UI state and metadata-free capture event logging. Errors restore the shell, including when the tray is unavailable.
-- Capture size bounded to 40 million pixels. No new dependencies.
+- Existing Python/PySide6 shell, tray, single instance, overlay and one-shot screen capture.
+- Isolated `features/session` package: in-memory conversation identity, assistance mode, latest image reference and immutable request/turn snapshots.
+- Romanian typed question field, Enter/button submission, mode selector, plain-text history and local validation feedback.
+- Explicit AI-unavailable notices, visually distinct from assistant answers. No network calls or generated answers. Modes record intent only.
+- At most 12 complete turns and 96,000 text characters, with bounded questions/explanations/notices. Oldest whole turns are removed as needed.
+- Future follow-up requests include successful previous explanations, current screen context and matching overlay annotations. Failed service notices are excluded from AI history. Old turns retain frame IDs rather than screenshot data.
+- Duplicate pending requests are rejected. End Session or visual-context replacement invalidates pending reply identity; late/duplicate responses cannot mutate the model.
+- **Încheie sesiunea** clears conversation, draft, mode, annotations, capture/preview and pending capture. Hide/reopen preserves the session; exit clears it.
 
 # Validation
 
-- Full Windows/Qt suite: **21 tests passed** (14 existing + 7 capture tests), no skips.
-- Synthetic pixmap encoding/decoding and actual pixel dimensions; invalid/oversized captures; fractional-DPI/negative-origin mapping.
-- No idle/repeated acquisition, pending request rejection, replacement, release, cancellation and simulated display invalidation/removal.
-- Shell/overlay hidden at the adapter call; restoration, preview release, shutdown cancellation, sanitized errors and retry with no tray.
-- Syntax compilation, `pip check` and `git diff --check` pass.
-- App-only shell render visually reviewed. Tests use synthetic images and never capture the desktop.
+- Full Windows/Qt suite: **26 tests passed**, no skips (21 existing plus 5 session tests).
+- Follow-up request content with synthetic explanations, immutable snapshots, mode/context retention, count/size eviction, validation, duplicate and stale reply rejection.
+- Real Qt typed Enter submission, unavailable-service feedback, literal HTML-looking text, hide/reopen retention, End Session cleanup during a pending capture and fresh-session restart.
+- Diagnostic log checked for absence of question text.
+- Session integration test rerun for app-only layout rendering; visually reviewed `.artifacts/session-typed.png` with synthetic text.
+- Syntax compilation, `pip check` and `git diff --check` pass. No desktop capture or AI calls during tests.
 
 # Manual Review
 
@@ -30,34 +30,32 @@ Started from clean commit `b2f21ad` (overlay). Speech-to-Text remains owned by t
 .\.venv\Scripts\python.exe -m jarvis
 ```
 
-Scroll to **Capturează peste 3 secunde**, click, and switch to the application to capture. Jarvis should return with a preview and original pixel dimensions. Check the preview excludes Jarvis/annotations. Clear with **Eliberează captura**. Repeat with the overlay visible, try canceling by reopening from the tray, and exit while waiting. README contains full steps and mixed-monitor checks.
+Scroll to **Conversație · Introducere prin text**, enter a question and press Enter. Confirm it appears with **Stare serviciu** saying AI is not connected. Select another mode and submit again. Hide/reopen to verify retention. Take a capture/show demo annotations if desired, then click **Încheie sesiunea** and confirm all temporary state clears. README contains detailed steps.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Close existing Jarvis before testing the installed launcher. Tests briefly open native windows/tray icons.
+Close an existing Jarvis before testing the installed launcher. Tests briefly open native windows/tray icons.
 
 # Limits / Not Implemented
 
-- Real Windows screen acquisition, compositor timing when hiding Jarvis, protected content, and mixed-monitor/DPI alignment require manual verification. Automated capture tests inject synthetic data.
-- Screen images and annotations do not follow underlying scrolling/content changes. Clear or capture again. No secure-desktop/exclusive-fullscreen guarantee or protected/black-image detection.
-- Only one selected monitor per capture. No foreground-window detection or image resizing for an AI provider yet.
-- Releasing drops owned references; it does not promise secure memory erasure. PNG encoding runs synchronously on the GUI thread and can briefly pause very large captures.
-- Existing overlay manual checks still apply: physical click-through, mixed DPI, Windows 10, Explorer restart and session-ending behavior. Long labels may clip in small caller-supplied bounds.
-- AI, typed tutoring conversations/session memory, TTS, global hotkey, STT integration and interruption are not implemented. STT implementation remains exclusively the teammate's responsibility.
+- AI is not connected. The application does not understand questions, solve problems, or generate explanations yet. Follow-up behavior is tested at the session-model boundary using synthetic responses.
+- No provider transport, asynchronous worker, network cancellation/timeout, structured AI annotation parser or model installation in this part. Future transport must honor request IDs and release its own context references.
+- No TTS, global hold/release shortcut, speech input integration or barge-in. STT implementation remains exclusively the teammate's responsibility.
+- Existing capture/overlay limitations remain: snapshots do not follow content changes, physical capture exclusion/click-through and mixed-monitor DPI require manual Windows verification, large capture encoding briefly runs on the GUI thread, and labels can clip in small bounds.
+- No persistent conversation history, database, cloud services or additional dependencies. Releasing references is not secure memory erasure.
 
 # Shared Files Changed
 
-- `src/jarvis/app.py`: capture composition, hide/restore, cancellation, release, status and sanitized logging.
-- `src/jarvis/presentation/main_window.py`: explicit capture/release controls, privacy text and temporary preview.
-- `src/jarvis/infrastructure/tray.py`: status setter.
-- `README.md`, `ARCHITECTURE.md`, `STATUS.md`: current scope, interfaces and review steps.
-- New isolated files: `src/jarvis/features/screen_capture/` and `tests/test_screen_capture.py`.
-- Existing overlay and STT code are untouched.
+- `src/jarvis/app.py`: session composition, typed submission, visual-context synchronization and End Session/shutdown cleanup.
+- `src/jarvis/presentation/main_window.py`: embeds the feature-owned typed panel and updates unavailable-feature copy.
+- `README.md`, `ARCHITECTURE.md`, `STATUS.md`: scope, contracts, limits and review steps.
+- New isolated files: `src/jarvis/features/session/` and `tests/test_session.py`.
+- STT, existing capture/overlay implementations and dependencies are unchanged.
 
 # Next Available Part
 
-A bounded tutoring session and typed-question path with a replaceable multimodal AI provider, using the captured image and validated annotation model. Inspect repository and available provider/runtime configuration first. Keep STT external; TTS and global hold/release activation can follow independently.
+Connect one real multimodal AI provider through an asynchronous adapter using the session request contract. Verify/install the selected runtime/model as appropriate, add bounded timeouts and cancellation, validate structured annotation output independently of explanation text, and test Romanian screenshot tutoring. Do not build competing providers or implement STT.
 
-READY FOR MANUAL REVIEW AND COMMIT — PART 3
+READY FOR MANUAL REVIEW AND COMMIT — PART 4
