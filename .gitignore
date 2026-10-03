@@ -18,3 +18,31 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+
+# Python environments
+.venv/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Credentials
+api key.txt
+.env
+.env.*
+!.env.example
+
+# Local models and captures
+models/
+recordings/
+screenshots/
+
+# Local logs and Windows files
+*.log
+Thumbs.db
+Desktop.ini
