@@ -10,6 +10,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["PySide6-Essentials==6.11.2"]
 
+[project.optional-dependencies]
+# Imports required by Ion's read-only workingVersion1.py. Its PyQt6 cursor is not loaded.
+voice = ["sounddevice>=0.5,<0.6", "faster-whisper>=1.2,<2", "google-genai>=1,<2", "mss>=10,<11"]
+
 [project.gui-scripts]
 jarvis = "jarvis.app:main"
 

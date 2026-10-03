@@ -67,6 +67,8 @@ class SessionPanel(QFrame):
                 blocks.append(f"Jarvis\n{turn.explanation}")
             elif turn.notice is not None:
                 blocks.append(f"Stare serviciu\n{turn.notice}")
+        if session.pending is not None:
+            blocks.append(f"Tu\n{session.pending.question}\n\nContext pregătit pentru AI · AI neconectat")
         self.history.setPlainText("\n\n".join(blocks))
         self.history.verticalScrollBar().setValue(self.history.verticalScrollBar().maximum())
         self.feedback.setText(f"{len(session.turns)} / {Session.MAX_TURNS} schimburi în memorie.")

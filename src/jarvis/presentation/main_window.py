@@ -84,10 +84,11 @@ class MainWindow(QWidget):
         card_layout.setContentsMargins(24, 24, 24, 24)
         card_layout.setSpacing(12)
         card_layout.addWidget(text("Bine ai venit!", "Welcome"))
-        card_layout.addWidget(text(
-            "Jarvis poate rămâne în fundal, lângă ceas. Pentru a reveni la această "
-            "fereastră, fă dublu clic pe pictograma J sau pornește din nou aplicația."
-        ))
+        self.activation_hint = text(
+            "Jarvis lucrează în fundal. Ține apăsat Ctrl+Shift+Space în aplicația ta, "
+            "vorbește, apoi eliberează. Această fereastră este pentru diagnostic."
+        )
+        card_layout.addWidget(self.activation_hint)
         card_layout.addSpacing(8)
         privacy = QFrame()
         privacy.setObjectName("Privacy")
@@ -96,9 +97,9 @@ class MainWindow(QWidget):
         privacy_layout.setSpacing(7)
         privacy_layout.addWidget(text("Tu alegi când începe asistența", "Strong"))
         privacy_layout.addWidget(text(
-            "Microfonul este oprit. Ecranul este capturat o singură dată, doar când "
-            "apeși butonul de captură. Imaginea rămâne temporar în memorie; "
-            "nu este salvată pe disc și nu se trimite către servicii AI."
+            "În repaus nu se înregistrează nimic. Activarea vocală pornește microfonul "
+            "și o singură captură de ecran. Eliberarea oprește microfonul. "
+            "Contextul rămâne în memorie; nu este trimis către AI."
         ))
         card_layout.addWidget(privacy)
         body.addWidget(card)
