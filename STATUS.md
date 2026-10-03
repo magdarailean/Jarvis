@@ -1,82 +1,98 @@
 # Current Milestone
 
-**Milestone 0 — Initialization.** Implementation complete; final UI verification in progress. No later milestone has been implemented.
+**Milestone 1 — Python migration of the existing background/tray application.** Completed and verified on 2026-10-03. Ready for manual review/commit. Milestone 2 has not started.
 
 # Working
 
-- C# / WPF solution using the installed .NET 8 SDK; no external NuGet dependencies.
-- Romanian welcome screen and visible `Gata` status, with an accurate initial-version notice.
-- Native resizable window, wrapping text, scrollable content, keyboard-accessible close button.
-- Explicit close and window close terminate the app (no hidden background process intended in milestone 0).
-- Per-monitor DPI-awareness manifest; normal user privileges.
-- Best-effort bounded startup/window-loaded/shutdown diagnostics at `%LOCALAPPDATA%\Jarvis\logs\application.log`.
-- Architecture, current run instructions, SDK pin, editor configuration, and build/IDE/secrets ignores.
+- Python 3.12 / PySide6 implementation, preserving the Romanian shell, Gata state, blue J icon, text and general layout.
+- Ascunde/X hides; tray double-click / Deschide Jarvis / duplicate launch reopens; Ieșire terminates.
+- Per-user/per-login-session single instance with the same Windows mutex/event names. Verified an actual C# launcher notified the Python primary before removing the old implementation.
+- Minimized-window restoration; queued activation on the UI thread; no idle polling.
+- Tray-unavailable fallback: visible Romanian explanation, hiding disabled, X exits.
+- App-only normal/minimum-size renders, wrapping/scrolling content and keyboard-accessible buttons.
+- Same best-effort diagnostic path and approximately 1 MiB bound; denied disk access/missing console tolerated.
+- Clean event-loop exit/restart, worker stop, handle release, late-activation rejection and recovery after abrupt child-process termination.
+- Editable package, pinned Qt dependencies, console and no-console Python launchers, standard-library unittest suite.
+- C# solution/source/test runner/build outputs removed. No .NET runtime or SDK required. Existing staged generated-file removals remain for the manual commit.
 
 # Partially Working
 
-- None within the initialization scope. This is a runnable shell, not yet a functioning AI tutor.
+- None within implemented migration scope. This remains a background shell, not yet an AI tutor.
 
 # Not Implemented Yet
 
-- Tray/background lifetime and global push-to-talk shortcut.
-- Microphone, Romanian STT/TTS, speech interruption.
-- Screen capture, transparent click-through overlay, persistent annotations.
-- Typed questions, actual AI provider, structured action validation, sessions and follow-ups.
-- Animated processing state, timeouts/cancellation, subsystem recovery, modes, settings.
-- Packaging/installer and Windows 10 / mixed-DPI / multiple-monitor verification.
+- Push-to-talk shortcut, microphone, Romanian STT/TTS and interruption.
+- Screen capture, click-through overlay and persistent annotations.
+- Typed questions, AI pipeline, sessions, multi-turn history and tutoring modes.
+- Animated processing state, request timeouts and settings persistence.
+- Standalone Windows installer; Windows 10 and mixed-monitor/DPI release verification.
 
 # Known Issues
 
-- .NET 8 support ends **2026-11-10**. Upgrade to .NET 10 before that date and before release; move this work earlier if the calendar requires it.
-- Windows 10 and multiple DPI scales are targets, not yet tested configurations.
-- Local-model latency and Romanian/math quality are unmeasured. Inspected hardware: about 32 GB RAM, AMD Radeon 880M integrated graphics; dedicated VRAM figures do not represent total available shared GPU memory. Ollama was not found on PATH.
-- Log files are diagnostic only; concurrent app instances can skip log entries if another process locks the file. Single-instance/tray lifetime is reserved for milestone 1.
+- Tested on Windows 11 build 26200, x64, Python 3.12.14 and PySide6-Essentials/shiboken6 6.11.2. Other supported Python/Windows combinations are not yet verified.
+- Qt widget mouse/keyboard events and native tray callbacks are tested. Physical Windows tray clicks, Explorer restart and logoff/reboot remain manual checks; no system settings or Windows session were changed.
+- Windows may put J under hidden icons. Relaunching also reopens the window.
+- Local AI latency and Romanian/math quality are unmeasured; no AI/voice dependencies were installed.
+- The prepared `.venv` uses the available local Python runtime. Each teammate must create their own environment; virtual environments are not portable.
+- Logging is best-effort; simultaneous short-lived duplicate processes may skip a log entry if the file is locked.
 
 # How I Tested This Milestone
 
-- Environment: Windows 11 build 26200, x64, SDK 8.0.424, Windows desktop runtime 8.0.30.
-- `dotnet build Jarvis.sln --configuration Debug --nologo`: passed, 0 warnings / 0 errors.
-- `dotnet build Jarvis.sln --configuration Release --nologo --no-restore`: passed, 0 warnings / 0 errors.
-- Launched the actual Release executable and inspected the rendered window and accessibility tree: Romanian diacritics, `Gata`, accurate availability/privacy notices, and close control present.
-- Confirmed startup and window-loaded events in the diagnostic file.
-- Remaining UI exit checks will be recorded before marking ready.
+- Installed editable package and pinned Qt runtime into `.venv`; syntax compilation and `pip check` pass.
+- Built `dist/jarvis_desktop-0.1.0-py3-none-any.whl`, installed it into an isolated `.artifacts/wheel-check` directory, verified imports came from that wheel, and reran the full suite: **10 tests passed** against the built package as well.
+- `python -m unittest discover -s tests -v`: **10 tests passed**, no skips, exit code 0.
+- Real Qt app/dispatcher, visible loaded shell and Romanian locale; normal/minimum layouts rendered and visually reviewed.
+- QtTest mouse click hides, Tab changes focus and Enter invokes exit. Real duplicate Python processes exit successfully and reopen/restore the same primary window.
+- Tray menu actions and double-click activation signal dispatch correctly; exit removes the icon and releases the instance lock.
+- Simulated missing-tray/initialization-error paths keep the window usable and close correctly.
+- Real child event loops exit and restart; abrupt interpreter death without cleanup permits a new primary. Test was corrected to terminate the interpreter, not only Windows' virtual-environment redirector.
+- Installed `jarvis.exe` GUI launcher and `python -m jarvis` both notified a primary using the actual production namespace and exited with code 0.
+- Legacy C# executable -> Python primary activation passed before legacy removal.
+- Disk-denied/missing-console logging and log size reset pass. No screenshots/audio/network requests are part of application runtime.
 
 # How You Can Test It
 
-From PowerShell at the repository root:
+The current machine's environment is already installed. From PowerShell at the Jarvis root:
 
 ```powershell
-dotnet restore Jarvis.sln
-dotnet build Jarvis.sln --configuration Debug --no-restore
-dotnet run --project src/Jarvis.Desktop/Jarvis.Desktop.csproj --configuration Debug --no-build
+.\.venv\Scripts\python.exe -m jarvis
 ```
 
-Verify `Gata` and Romanian text; resize/maximize; close using `Închide`. Relaunch and close with the X. The process should exit both times. See README for the log and process checks.
+Check Gata and J near the clock. Ascunde/X should hide; double-click J or choose Deschide Jarvis to reopen. Start Jarvis again to restore the same instance. Resize, use Tab/Enter, and choose Ieșire to exit completely. For a console-free launch, double-click `.venv\Scripts\jarvis.exe`.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Close existing Jarvis first to include the installed-launcher test. See README for fresh-machine setup, package build and full manual steps.
 
 # Required Configuration
 
-- Windows 10/11 x64 and .NET SDK 8.0.424 or a newer 8.0.4xx patch.
-- No environment variables, API credentials, microphone permissions, model downloads, or network service required by this version.
+- Windows 10/11 x64 and Python 3.12+; verified baseline is 3.12.
+- `pip install -e .` installs pinned PySide6-Essentials 6.11.2 and matching shiboken6. Initial installation/build may need network access; application use does not.
+- No API keys, app-specific environment variables, microphone permissions, models or backend services.
 
 # Next Milestone
 
-**Milestone 1 — Background lifetime and tray.** Implement a single-instance application, Romanian tray actions/status, reopen/hide window behavior, and an explicit exit action. Do not implement it until the user has manually committed milestone 0 and says `continue`.
+**Milestone 2 — In-memory session and typed fallback.** Introduce domain/application state and typed questions with honest unavailable-service feedback until the AI milestone. Wait for the user's manual migration commit and `continue` first.
 
-Planned roadmap (12 milestones total; each independently built, run, tested, documented, then stopped):
+Roadmap (12 milestones; each built/run/tested/documented, then stopped):
 
-| Milestone | Scope and acceptance focus |
+| Milestone | Scope |
 | --- | --- |
-| 0 | Initialization: runnable Romanian shell, architecture, documentation. |
-| 1 | Background lifetime: single instance, tray, reopen/hide/exit and visible idle status. |
-| 2 | In-memory session and typed fallback: start/end, messages, honest service-unavailable feedback; introduce Core boundaries. |
-| 3 | Overlay engine: persistent rectangle/circle/arrow/line/text with IDs, normalized geometry, clear action, click-through and deterministic sample annotations. |
-| 4 | Explicit screen context: one capture per activation, monitor/DPI mapping, stale-overlay rule and no idle capture/archive. |
-| 5 | First real AI pipeline: local Ollama vision + typed question -> Romanian answer + validated annotation actions; session history, animated busy state, cancellation/timeouts, malformed-output recovery. |
-| 6 | Push-to-talk input: Ctrl+Shift+Space hold/release, bounded recording, listening indicator, conflict/error handling, local Romanian Whisper STT; typed fallback retained. |
-| 7 | Romanian speech output: local TTS, playback lifecycle, text fallback; annotations remain after speech. |
-| 8 | Follow-ups and interruption: stop speech on new activation, stable annotation references/updates, context budget and stale-response protection. |
-| 9 | Tutoring modes and answer quality: explain, solve & explain, tutor, guide; Romanian math/document/interface scenarios and missing-context behavior. |
-| 10 | Settings and robustness: configurable shortcut, device/service preferences, minimal JSON persistence, timeout/error and privacy regression tests, mixed-DPI/multi-monitor checks. |
-| 11 | Release preparation: supported .NET 10 baseline (earlier if required), Windows 10/11 verification, distributable package, third-party notices/model licenses, final end-to-end checks. |
+| 0 | Initialization and runnable Romanian shell. |
+| 1 | Tray/background lifecycle and single instance; migrated to Python at user request. |
+| 2 | In-memory sessions and typed fallback; introduce Domain/Application. |
+| 3 | Persistent overlay shapes/text with stable IDs and normalized geometry. |
+| 4 | Explicit one-shot screen capture, monitor/DPI mapping and stale-context rule. |
+| 5 | First real local vision pipeline, Romanian text, validated annotations, busy state and cancellation/timeouts. |
+| 6 | Hold/release shortcut, bounded microphone recording and Romanian STT. |
+| 7 | Romanian TTS/playback with text fallback and persistent annotations. |
+| 8 | Follow-ups, interruption, annotation updates and stale-response protection. |
+| 9 | Explain, solve & explain, tutor and guide modes; Romanian quality scenarios. |
+| 10 | Shortcut/device settings, minimal persistence and robustness/DPI/privacy tests. |
+| 11 | Python/Qt release baseline, Windows 10/11 verification, standalone distribution, licenses and end-to-end checks. |
 
-No commits have been created by the agent. Manual review/commit remains the user's responsibility.
+No agent-created commits. Suggested description: `refactor: migrate desktop shell to Python and PySide6`
+
+READY FOR MANUAL COMMIT — MILESTONE 1

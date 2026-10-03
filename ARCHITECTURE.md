@@ -1,39 +1,38 @@
 # Architecture
 
-## Stack and rationale
+## Selected stack
 
-- C# / WPF on Windows 10/11, x64. WPF provides native windows, vector drawing, accessibility, and a small deployment surface. Win32 interop will handle global input and click-through overlays; Windows Forms `NotifyIcon` will provide the tray icon.
-- Milestone 0 uses the installed .NET SDK 8.0.424 and `net8.0-windows` so the repository runs immediately. .NET 8 support ends **2026-11-10**: upgrade to .NET 10 LTS before that date and before distributing a release (release gate, not an optional enhancement). [Microsoft support policy](https://dotnet.microsoft.com/en-us/platform/support/policy).
-- No external NuGet packages in the bootstrap. No web view, server, database, accounts, or dependency injection framework.
-- First AI provider: local **Ollama + Gemma 3 4B**, via `HttpClient` and `System.Text.Json`. The inspected computer has approximately 32 GB RAM. This is a practical starting point for image input without API fees or sending screenshots to a cloud service. CPU latency and Romanian/math accuracy need measurement in the AI milestone; no performance claim is made yet. [Model information](https://ollama.com/library/gemma3).
-- A cloud multimodal free tier was considered, but quota limits and data-use terms are a poor default for private desktop screenshots. Paid cloud APIs conflict with the zero-API-cost preference. No second provider will be implemented before the local pipeline works. [Example free-tier tradeoffs](https://ai.google.dev/gemini-api/docs/pricing).
-- Planned voice: NAudio for microphone/playback, Whisper.net with a multilingual local Whisper model for Romanian STT, and a local Piper Romanian voice for TTS. Verify the selected package/model licenses and Romanian quality before bundling; typed input and text output remain fallbacks. These are decisions for later implementation, not installed dependencies.
+Python 3.12+ (64-bit), PySide6 / Qt Widgets, Windows 10/11. Qt supplies the desktop window, native tray, accessibility, DPI scaling and future transparent overlays. Only `PySide6-Essentials` 6.11.2 and matching `shiboken6` are required, isolated in `.venv`. No Qt Addons, browser runtime, server, database or .NET dependency. [Qt setup](https://doc.qt.io/qtforpython-6/gettingstarted.html).
 
-## Project boundaries
+This is a language migration of **milestone 1**, not a new feature milestone. Romanian copy, layout, close-to-tray behavior, explicit exit, duplicate activation, privacy and diagnostic path are preserved. C#/WPF source and build infrastructure are replaced rather than maintained as a second implementation. Qt manages DPI and session-ending integration; no custom executable manifest is required for this Python launch path.
 
-Current repository: `src/Jarvis.Desktop` is the WPF executable. `Presentation` owns the Romanian shell; `Infrastructure` contains best-effort diagnostic logging. `App` is the composition root. There is no domain behavior yet, so no empty abstraction projects are created.
+## Boundaries
 
-As the relevant milestones introduce behavior:
+- `src/jarvis/app.py`: composition root and desktop lifecycle. Owns the Qt application/event loop; connects presentation signals to actions.
+- `presentation/main_window.py`: Romanian widgets, wrapping/scrolling layout, hide/exit signals. No Windows or AI calls.
+- `infrastructure/tray.py`: native Qt tray adapter and generated J icon.
+- `infrastructure/single_instance.py`: Windows mutex/events via standard-library ctypes, with explicit handle ownership and a blocking notification worker.
+- `infrastructure/app_log.py`: best-effort bounded lifecycle diagnostics.
+- `tests/`: standard-library unittest, real Qt widgets/event loop and child processes. QtTest drives application widgets directly, without a desktop-control helper.
 
-- **Jarvis.Core / Domain**: session, messages, assistant modes/states, annotation IDs and normalized geometry. No WPF, Win32, or provider references.
-- **Jarvis.Core / Application**: activation/turn orchestration, cancellation, validation, and ports such as `IAiProvider`, `ISpeechRecognizer`, `ISpeechSynthesizer`, `IScreenCapture`. References Domain only.
-- **Jarvis.Infrastructure**: concrete local AI/voice services, Windows adapters, optional JSON settings persistence. References Core.
-- **Jarvis.Desktop / Presentation**: WPF views/view models, tray, status indicator, overlay. Composes Infrastructure and Core.
-- **Persistence**: active sessions stay in memory; add a settings file only when settings exist. No screenshot/audio archive or conversation database by default.
+No empty layers. When tutoring state arrives in milestone 2, introduce framework-independent `domain` and `application` modules using Python dataclasses/enums and service protocols. Domain/Application must not import Qt, Windows or concrete providers. Future `AiProvider`, `SpeechRecognizer`, `SpeechSynthesizer` and `ScreenCapture` ports belong to Application; Infrastructure implements them. Sessions remain in memory; add settings persistence only when needed. No database.
 
-Introduce those projects/interfaces when used, not as speculative scaffolding. Tests focus on state transitions, annotation validation and failure recovery, then Windows integration smoke checks.
+## Current lifecycle
 
-## Target data flow (not implemented in milestone 0)
+Launch -> per-user/per-login-session mutex -> native tray + Romanian window -> Ascunde/X hides -> tray double-click / Deschide Jarvis / duplicate launch reopens -> Ieșire disposes resources and quits.
 
-Hold Ctrl+Shift+Space -> stop current speech -> show listening state -> capture the selected monitor once and record microphone -> release any shortcut key -> stop recording -> Romanian STT -> session + screenshot + annotation snapshot -> local multimodal request -> validated structured response -> persist annotation changes in the in-memory session -> show Romanian text and speak it.
+The same `Local\Jarvis.<Windows SID>.Instance` mutex and `.Activate` auto-reset event as the old C# app are retained. Secondary processes signal and exit before creating UI. A worker blocks on activation/stop handles without polling and emits a queued Qt signal; the main thread performs all UI changes. Shutdown wakes/joins the worker before closing handles. Mutex acquire/release stays on the main thread. Late activation cannot reopen a closed controller, and Windows releases ownership on process death. Session-ending requests trigger clean exit.
 
-- Register the shortcut and report conflicts; support reconfiguration later. Do not log unrelated keystrokes. No idle capture, microphone recording, or AI requests.
-- Annotation commands use stable IDs and `add/update/highlight/remove` operations on rectangle, circle, arrow, line, and text. Validate version, operation, finite normalized coordinates, text length, IDs, and limits independently; retain a valid explanation if visual actions fail.
-- Store each capture's monitor bounds/DPI with its annotations; convert normalized coordinates at the Windows rendering boundary. Hide stale overlays on an explicit context change, preserving the session with a visible explanation. Never clear annotations just because speech ended.
-- Serialize turns; cancellation and generation IDs prevent late responses from modifying a newer or ended session. End session clears transient content; explicit clear removes annotations.
-- Visible Romanian states and an animated busy indicator accompany asynchronous work. Use bounded recording, request timeouts and cancellation. Log lifecycle events and durations, never screenshots, audio, transcripts, prompts, credentials, or model responses by default.
-- Treat visible screen text as untrusted content, not instructions to operate the machine. AI can explain and annotate; it gets no clicking, shell, or execution tools.
+Without a successfully initialized tray, hiding stays disabled, a Romanian message is shown, and X requests exit. Qt handles normal tray integration; Explorer restart and actual Windows session-ending still need release verification.
 
-## Milestone 0 behavior
+Lifecycle events and error types go to `%LOCALAPPDATA%\Jarvis\logs\application.log`, reset near 1 MiB. File errors cannot block the UI. No prompts, screenshots, audio, credentials or conversation content are logged. Idle means no recording, captures or network activity. No automatic startup registration.
 
-Launch -> Romanian window with `Gata` and an explicit initial-version notice -> close button or window close -> process exits. The shell cannot capture, record, call AI, or run in the tray yet. Startup/shutdown events go to a bounded local diagnostic file, with debugger-only fallback if file access fails.
+## Future pipeline (not implemented)
+
+Hold Ctrl+Shift+Space -> interrupt speech -> listening indicator -> one relevant screen capture + bounded recording -> release -> Romanian STT -> session + screenshot + annotation snapshot -> local AI -> validated structured result -> persistent overlay actions + Romanian text/TTS.
+
+First planned provider remains local Ollama + Gemma 3 4B via HTTP/JSON. The inspected machine has about 32 GB RAM and AMD 880M integrated graphics. CPU latency and Romanian/math quality require evaluation in milestone 5. Local inference avoids API charges and cloud screenshot uploads; do not add a second provider before the first works. [Model reference](https://ollama.com/library/gemma3).
+
+Python voice plan: local multilingual Whisper through `faster-whisper`, QtMultimedia or a focused audio adapter for capture/playback, and local Piper Romanian TTS. These replace the C#-specific Whisper.net/NAudio plan; none is installed or implemented yet. Verify engine/model licenses and Romanian quality before bundling. Typed input/text output remain fallbacks.
+
+Annotation commands use stable IDs and normalized geometry. Validate operations, finite coordinates, IDs and limits independently of explanation text. Preserve annotations after speech, maintain multi-turn history, serialize/cancel turns and reject stale responses. Record monitor/DPI context and hide stale overlays under an explicit screen-change rule. AI gets no shell or clicking tools. No permanent screen/audio archive, accounts, telemetry or cloud database.

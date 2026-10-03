@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis-desktop"
+version = "0.1.0"
+description = "Romanian Windows desktop assistant and tutor"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["PySide6-Essentials==6.11.2"]
+
+[project.gui-scripts]
+jarvis = "jarvis.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["jarvis*"]
