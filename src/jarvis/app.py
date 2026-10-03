@@ -10,6 +10,8 @@ from jarvis.infrastructure.app_log import AppLog
 from jarvis.infrastructure.single_instance import SingleInstance
 from jarvis.infrastructure.tray import TrayIcon, create_icon
 from jarvis.presentation.main_window import MainWindow
+from jarvis.features.overlay.demo import demo_annotations
+from jarvis.features.overlay.window import OverlayWindow
 
 
 class DesktopController(QObject):
@@ -25,6 +27,7 @@ class DesktopController(QObject):
         self.window: MainWindow | None = None
         self.tray: TrayIcon | None = None
         self.instance: SingleInstance | None = None
+        self.overlay: OverlayWindow | None = None
         self.exit_code = 0
         self._closed = False
         self.activation_requested.connect(self.reopen_window, Qt.ConnectionType.QueuedConnection)
@@ -33,7 +36,7 @@ class DesktopController(QObject):
         app.commitDataRequest.connect(self.request_exit)
 
     def start(self) -> bool:
-        self.log.write("Application starting; milestone=1; runtime=python; capture=false; microphone=false.")
+        self.log.write("Application starting; feature=overlay; runtime=python; capture=false; microphone=false.")
         try:
             self.instance = SingleInstance(self.instance_key)
             if not self.instance.is_primary:
@@ -52,6 +55,8 @@ class DesktopController(QObject):
         self.window = MainWindow()
         self.window.setWindowIcon(create_icon())
         self.window.exit_requested.connect(self.request_exit)
+        self.window.overlay_demo_requested.connect(self.show_overlay_demo)
+        self.window.overlay_clear_requested.connect(self.clear_overlay)
         self.window.hidden_to_tray.connect(
             lambda: self.log.write("Main window hidden; tray remains active.")
         )
@@ -67,6 +72,36 @@ class DesktopController(QObject):
         self.log.write("Main window loaded; state=Ready.")
         self.instance.listen(self.activation_requested.emit)
         return True
+
+    @Slot()
+    def show_overlay_demo(self) -> None:
+        if self._closed or self.window is None:
+            return
+        self.clear_overlay()
+        try:
+            self.overlay = OverlayWindow(self.window.screen())
+            for annotation in demo_annotations():
+                self.overlay.upsert(annotation)
+            self.window.overlay_feedback.setText(
+                "Demonstrația este vizibilă. Ascunde Jarvis pentru a lucra în altă aplicație."
+            )
+            self.log.write("Overlay updated; source=static-demo.")
+        except (RuntimeError, ValueError, OSError) as error:
+            self.clear_overlay()
+            self.window.overlay_feedback.setText(
+                "Adnotările nu pot fi afișate acum. Încearcă din nou."
+            )
+            self.log.write(f"Overlay failed; error={type(error).__name__}.")
+
+    @Slot()
+    def clear_overlay(self) -> None:
+        if self.overlay is not None:
+            self.overlay.close()
+            self.overlay.deleteLater()
+            self.overlay = None
+            self.log.write("Overlay cleared.")
+        if self.window is not None:
+            self.window.overlay_feedback.setText("Adnotările au fost șterse.")
 
     @Slot()
     def reopen_window(self) -> None:
@@ -93,6 +128,7 @@ class DesktopController(QObject):
         if self._closed:
             return
         self._closed = True
+        self.clear_overlay()
         if self.window is not None:
             self.window.prepare_exit()
             self.window.close()

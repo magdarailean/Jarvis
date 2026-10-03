@@ -2,7 +2,7 @@
 
 A Windows desktop assistant and tutor for Romanian-speaking users, primarily in Moldova.
 
-**Current state: Milestone 1, migrated to Python/PySide6.** The Romanian welcome window, `Gata` status, blue J tray icon, hide/reopen, single-instance activation and explicit exit work. AI, voice, screen capture, annotations, shortcuts and conversations are not implemented yet. Idle operation records nothing and makes no network requests.
+**Current state: Part 2, screen overlay foundation.** The Romanian shell, tray, single-instance activation and explicit exit work. A transparent overlay now draws persistent shapes and labels over one monitor, with demo/clear controls. AI, voice, screen capture, shortcuts and conversations are not implemented yet. Idle operation records nothing and makes no network requests.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ py -3.12 -m venv .venv
 
 This installs Jarvis in editable mode and the pinned `PySide6-Essentials==6.11.2` package (with matching `shiboken6`). No activation script or PowerShell execution-policy change is needed. Open this folder in your Python IDE and select `.venv\Scripts\python.exe` as its interpreter.
 
-**On the current development machine, `.venv` is already created and installed.** You can run the commands below immediately, even though `py` is not on PATH. This environment was created using the available Python 3.12.14 runtime; teammates should create their own environment with their installed Python. Do not commit or copy `.venv` between computers.
+**On the current development machine, `.venv` has been recreated and installed.** You can run the commands below immediately. This environment uses the available Python 3.12.14 runtime; teammates should create their own environment with their installed Python. Do not commit or copy `.venv` between computers.
 
 ## Run
 
@@ -52,6 +52,16 @@ You may also double-click `.venv\Scripts\jarvis.exe` in File Explorer. It is a P
 7. Choose **Ieșire** from the window or tray. The window/icon and Python process exit. Relaunch and exit again to verify restart.
 
 If the tray is unavailable or initialization fails, hiding is disabled, a Romanian explanation appears, and X exits. The app does not register itself to start with Windows. Single-instance scope is the current Windows user and login session, including compatibility with an already-running previous C# build.
+
+## Overlay review (Part 2)
+
+1. Launch Jarvis and click **Arată demonstrația** (scroll down if needed). Static shapes, an arrow and Romanian labels appear on the monitor containing Jarvis. They do not describe the content underneath.
+2. Click **Ascunde**, switch to another application, and click/type/scroll beneath both the shapes and labels. The overlay should stay visible without taking focus or blocking input.
+3. Reopen Jarvis from its tray icon and click **Șterge adnotările**. All marks disappear. Repeating the demo replaces its previous overlay.
+4. Move Jarvis to another monitor and show the demo again. Check alignment and readable labels at your usual Windows scaling. Changing display geometry/DPI or disconnecting the target monitor clears stale marks.
+5. Choose **Ieșire** while marks are visible. Both Jarvis and the overlay should disappear.
+
+The demo captures no screen/audio and sends no requests. Marks stay fixed when underlying content scrolls or changes; clear them yourself. This foundation targets ordinary desktop windows, not the Windows secure desktop or exclusive fullscreen applications. Physical click-through and mixed-monitor DPI behavior remain manual release checks.
 
 ## Build and test
 
@@ -91,6 +101,7 @@ The same log location as before records startup, tray creation, hide/reopen, dup
 src/jarvis/
   app.py                         # Composition and desktop lifetime
   presentation/main_window.py    # Romanian Qt widgets and UI signals
+  features/overlay/              # Validated annotations, Qt renderer, static demo
   infrastructure/
     single_instance.py          # Windows mutex/event boundary
     tray.py                     # Tray menu/icon adapter

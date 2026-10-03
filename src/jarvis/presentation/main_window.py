@@ -38,6 +38,8 @@ def text(value: str, name: str = "Body") -> QLabel:
 class MainWindow(QWidget):
     exit_requested = Signal()
     hidden_to_tray = Signal()
+    overlay_demo_requested = Signal()
+    overlay_clear_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -95,11 +97,20 @@ class MainWindow(QWidget):
         ))
         card_layout.addWidget(privacy)
         body.addWidget(card)
-        body.addWidget(text("Rulare în fundal · Etapa 1", "Strong"))
+        body.addWidget(text("Adnotări pe ecran · Demonstrație", "Strong"))
         body.addWidget(text(
-            "Conversațiile, comanda rapidă, explicațiile vocale și adnotările pe ecran "
-            "nu sunt disponibile încă. Nu este necesară nicio configurare.", "Muted"
+            "Arată forme și un pas numerotat pe monitorul acestei ferestre. "
+            "Poți apăsa și scrie în aplicațiile de sub adnotări. Formele sunt exemple fixe; "
+            "conversațiile, comanda rapidă și explicațiile vocale nu sunt disponibile încă.", "Muted"
         ))
+        self.overlay_demo_button = QPushButton("Arată demonstrația")
+        self.overlay_demo_button.clicked.connect(self.overlay_demo_requested.emit)
+        self.overlay_clear_button = QPushButton("Șterge adnotările")
+        self.overlay_clear_button.clicked.connect(self.overlay_clear_requested.emit)
+        body.addWidget(self.overlay_demo_button)
+        body.addWidget(self.overlay_clear_button)
+        self.overlay_feedback = text("Adnotările rămân până le ștergi sau închizi Jarvis.", "Muted")
+        body.addWidget(self.overlay_feedback)
         self.tray_error = text("", "TrayError")
         self.tray_error.hide()
         body.addWidget(self.tray_error)
