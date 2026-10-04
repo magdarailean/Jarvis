@@ -87,3 +87,9 @@ First planned provider remains local Ollama + Gemma 3 4B via HTTP/JSON. Part 4 f
 Speech-to-Text implementation and library selection belong to the teammate. Use their interface or typed input during development. TTS remains a separate future feature; the earlier local Piper idea still needs license and Romanian voice-quality evaluation. No voice packages are installed here.
 
 Annotation commands use stable IDs and normalized geometry. Validate operations, finite coordinates, IDs and limits independently of explanation text. Preserve annotations after speech, maintain multi-turn history, serialize/cancel turns and reject stale responses. Record monitor/DPI context and hide stale overlays under an explicit screen-change rule. AI gets no shell or clicking tools. No permanent screen/audio archive, accounts, telemetry or cloud database.
+
+## Local setup boundary (Milestone 6)
+
+`local_config.py` loads only allowlisted settings from ignored root .env without logging values; existing process environment wins. `stt_setup.py` explicitly downloads models to ignored root models/stt and provides opt-in microphone diagnostics. The existing isolated Ion worker discovers that local large-v3 directory while preserving CPU/int8 and local-files-only behavior.
+
+`python -m jarvis.openrouter` launches the existing read-only CursorMain/workingVersion4.py independently. It sets the local small model path, requires credentials/model before real startup, and disables owner bytecode writes. PyQt6 and PySide6 never share a process. No owner source edits or unified AI/session pipeline were introduced. The existing original companion and Jarvis application retain their distinct runtime behavior.

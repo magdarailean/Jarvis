@@ -411,6 +411,8 @@ def create_application() -> QApplication:
 
 
 def main() -> int:
+    from jarvis.local_config import load_local_config
+    load_local_config()
     app = create_application()
     controller = DesktopController(app, enable_voice=True, background="--window" not in sys.argv)
     try:

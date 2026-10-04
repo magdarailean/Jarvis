@@ -75,7 +75,9 @@ def main():
 
     try:
         ion = load_ion(Path(sys.argv[1]))
-        model = ion.WhisperModel(os.environ.get("JARVIS_ION_MODEL", "large-v3"),
+        from jarvis.local_config import load_local_config, speech_model
+        load_local_config()
+        model = ion.WhisperModel(speech_model("JARVIS_ION_MODEL", "large-v3"),
                                  device="cpu", compute_type="int8", local_files_only=True)
     except Exception as error:
         emit("error", code=type(error).__name__)
