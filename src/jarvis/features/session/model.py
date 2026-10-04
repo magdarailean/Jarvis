@@ -1,6 +1,6 @@
 """In-memory conversation ownership and response identity checks; no I/O or Qt."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from uuid import uuid4
 
@@ -94,6 +94,13 @@ class Session:
         )
         self._pending = request
         return request
+
+    def set_guide_context(self, request_id, context):
+        """Keep dispatched routing and response validation on the same request."""
+        if not self._matches(request_id):
+            raise ValueError("Request is no longer pending")
+        self._pending = replace(self._pending, guide_context=context)
+        return self._pending
 
     def complete(self, request_id: str, explanation: str) -> bool:
         if not self._matches(request_id):

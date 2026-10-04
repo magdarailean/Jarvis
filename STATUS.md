@@ -1,67 +1,63 @@
 # Current Milestone
 
-Real OpenRouter / AI-selected VisualPlan integration in normal Jarvis, built on the existing uncommitted callout foundation. No Git commit created. Branch continue-magda began at 62c867f with the prior callout changes present; those changes were preserved/refined.
+Immediate click dismissal of temporary visual assistance in the real runtime. Existing pointer guidance and EXPLAIN callout behavior preserved. Existing TTS/callout behavior preserved; no commit created.
 
 # Working
 
-- Normal `python -m jarvis`: hold Ctrl+Shift+Space → real isolated Ion recording plus current-screen capture → release/transcription → actual OpenRouter multimodal request → validated answer/visual plan → existing transparent production overlay.
-- AI chooses semantic actions: none, callout, highlight, arrow, rectangle, circle, line, pointer/cursor and combinations. No keyword rules, automatic callout or production demo targets.
-- Main provider adapts the existing generic OpenRouter protocol outside CursorMain: same endpoint/auth/image/schema approach, tutoring prompt and generalized response schema. Actual live key/request/response verified. No second vendor or simulated runtime path.
-- Compact content-sized dark callouts with white wrapped text, automatic leader and target avoidance. Basic bubble collision avoidance. Stable IDs, clear/highlight/update support. Real overlay remains transparent outside requested annotations.
-- Existing GuidePointer is called unchanged through an external PyQt worker. No cursor algorithm, positioning implementation or owner file changed. One pointer target at a time.
-- Animated AI waiting status, 45-second transport timeout, 60-second overall deadline, cancellation/interruption, stale-response rejection, Romanian missing-key/auth/credit/rate/network feedback. Invalid visuals or unavailable rendering do not discard the textual answer.
-- Follow-up requests contain bounded prior answers and current visual descriptions. End Session/exit clears context/visuals and aborts transport. Display invalidation also clears pointer.
-- Main speech adapter now discovers installed small when large-v3 is absent and no explicit model override is set. Actual Ion worker reports ready on this machine. Explicit user overrides remain authoritative.
-- Normal UI remains available through --window/tray. Typed fallback now sends real requests too. Prior standalone demo remains developer-only; no additional standalone preview deliverable.
+- Left/right click clears temporary callouts and their leaders, speech caption and pointer, stops speech, and cancels outstanding visual holds. This also works outside GUIDE, without starting automatic screen capture. GUIDE still captures after release/settling for the next step. Persistent annotations are preserved.
+
+- GUIDE now displays the exact spoken text in a separate caption. Status updates do not overwrite it. It remains through speech plus five seconds, then hides; click/next-step/PTT clears it immediately. Cursor guidance remains independent.
+
+- “Ajuta-ma cum sa fac o prezentare in canva” now routes to GUIDE instead of AUTO. Creation requests for editable artifacts share this routing; homework/recipe requests are not classified by the generic verb “fac” alone. AI chooses target geometry from the actual screen.
+
+- GUIDE pointer is held during TTS, then hidden after five seconds. Click/PTT clears it immediately and cancels the old timer. Expiry preserves the active goal and click observer. Speech failure also releases the pointer after five seconds.
+- Navigation variants such as “Cum pot închide site-ul?” and “Cum să-l închid?” route to GUIDE. Provider instructions prioritize the spoken task over unrelated screenshot content.
+
+- Explicit arată-mi/arata-mi/unde wins over explanation terms. Active GUIDE survives PTT follow-ups unless the user explicitly requests an explanation. The dispatched request and pending response-validation request share the same GUIDE context.
+
+- Online edge-tts Romanian Alina synthesis and in-memory audio playback through a cancellable isolated worker.
+- TTS reads exactly the final rendered callout text, in painting order for multiple callouts. No separate longer spoken answer. Existing bubble text selection is preserved.
+- GUIDE keeps cursor instructions and routing. EXPLAIN keeps callouts/typewriter.
+- Preparing/speaking/ready states; PTT interrupts speech without waiting and preserves conversation history.
+- Spoken bubbles remain during synthesis/playback and expire five seconds after speech finishes or fails; typewriter timing is unchanged. Romanian Alina speaks at +10% rate. New PTT clears temporary callouts as before.
+- Speech errors/timeouts retain answer and visuals. No Ion or CursorMain changes.
 
 # Partially Working
 
-- Complete physical hold/speak/release exercise with a human speaking Romanian remains a manual acceptance check. Automated transport/controller tests use synthetic audio; actual model readiness and microphone format were checked separately.
-- Main-runtime TTS is not connected in this milestone. Complete answers are available in the main UI; the old separate companion retains its own TTS.
+- Physical hold/speak/release, human assessment of Romanian pronunciation and GUIDE cursor acceptance remain manual checks.
+- TTS is online and depends on the Edge speech service being available.
 
 # Not Implemented Yet
 
-- Tracking targets through scrolling/window movement, sophisticated global layout/arrow routing, streaming responses, main-runtime speech playback and automatic action execution.
+- Offline TTS and configurable voice selection.
 
 # Known Issues
 
-- Screenshot is captured near the start of recording; changing the underlying content later can make targets stale.
-- Very large targets/text can leave no safe bubble placement; visuals are then omitted while answer text remains available.
-- Bubble collision avoidance does not guarantee protection of every other callout's target or noncrossing arrows. Limited to 16 callouts / 32 inspected incoming actions.
-- Separate companion and main Jarvis have overlapping shortcuts. Run normal Jarvis only for this acceptance test.
-- Cursor source remains externally owned; API changes require adapter review. Owner source is loaded from the editable checkout with bytecode writes disabled.
+- Multiple spoken bubbles remain together until the combined utterance finishes, then expire together five seconds later.
+- Existing single-callout selection may expand a bubble to the full explanation. Speech follows the resulting visible text exactly.
+- Normal startup uses the existing voice-only background interface.
 
 # How I Tested This Milestone
 
-- 55 Jarvis tests passed: previous shell/overlay/STT/session regressions plus hold/capture/release/transcript/provider delivery, real screenshot bytes in multimodal payload, semantic combinations, text preservation, pointer boundary, compact sizing/collision avoidance, follow-up context, missing key, cancellation, timeout and late replies.
-- 64 frozen companion regression tests passed with -B. Dependency check passed.
-- Real OpenRouter request using the configured key and a generated equation image succeeded. The AI independently returned two callout actions; the normal controller accepted the actual response and created the production overlay. No private desktop content was sent in this network check.
-- Native pointer adapter ran the existing GuidePointer process, indicated a target, hid and shut down with zero errors.
-- Normal background Jarvis startup: actual STT warmup ready=True; idle capture=False; idle AI request=None. No microphone recording during this startup check.
-- Full read-only CursorMain/Ion SHA-256 baseline remained identical. No owner source or cursor implementation changed. git diff --check passed.
+- 101 tests passed (including an actual five-second Qt timer expiry): click dismissal outside GUIDE, real GUIDE mouse-sampling callback cleanup and next-step settling, GUIDE caption text equality, survival through speaking/ready status, real five-second caption expiry and PTT cleanup, exact Canva phrase, pointer-only provider schema, controller delivery, rejected bubble response and preserved creation goal after a click, pointer speech lifetime, click/PTT timer cancellation, next-step replacement, speech failure, mixed keyword priority, GUIDE schema restriction, actual controller voice-follow-up routing, rejection of AI callouts in GUIDE, click invalidation/capture, multi-step progression and completion evidence, plus TTS and overlay regressions.
+- No CursorMain or Ion files changed. Pointer positioning/implementation remains unchanged; accuracy still depends on AI identifying the correct visible target.
+- Live Canva/microphone acceptance remains manual; automated checks use the real controller/provider payload path with simulated AI responses.
+- Previous native startup check encountered hotkey registration failure under sandbox; unrestricted startup exited through the single-instance gate. No claim of a new live microphone/AI acceptance run. Restart the existing Jarvis instance for manual validation.
 
 # How You Can Test It
 
+Exit existing Jarvis through its tray, then run:
+
 ```powershell
-cd C:\Users\Magda\Documents\GitHub\Jarvis
 .\.venv\Scripts\python.exe -m jarvis
 ```
 
-Keep the configured key in .env; installed small is sufficient. Wait for Gata, open a visible problem/document, hold Ctrl+Shift+Space, say a Romanian question, release. Expect animated processing then the AI-selected annotations on the real desktop. No blue synthetic rectangle should appear unless a highlight/rectangle was requested by the AI. Ask a follow-up; verify retained context. Ask a general question and confirm no forced callout. Ask where to click and let the AI choose pointer/arrow/highlight. Inspect full answers through tray Deschide Jarvis or --window. End Session clears visuals and pending work. Exit with Ieșire.
-
-```powershell
-.\.venv\Scripts\python.exe -m jarvis --window
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-```
-
-Main-runtime answers are currently textual/visual; there is no spoken answer playback in this milestone. No commit was made.
+Hold Ctrl+Shift+Space and say “Ajuta-ma cum sa fac o prezentare in canva” while Canva is visible. Release: expect cursor guidance, no bubble. Click the indicated control; expect the old pointer to disappear and a fresh-screen next step. Try “Și acum?” through PTT: GUIDE should persist. Try the mixed request “Arată-mi butonul și explică-mi ce face”: GUIDE wins. “Explică-mi acest buton” explicitly exits GUIDE. Click while a bubble is visible or being read: it and its leader must disappear immediately and speech must stop. Repeat outside GUIDE; no automatic next request should occur. Wait through the guidance speech: its complete text must be visible in a separate caption, alongside cursor guidance. Caption and pointer remain through speech and disappear five seconds later. Click before or after expiry to continue; the next pointer gets its own lifetime. New PTT must hide it immediately. Continue until the requested task is visibly complete.
 
 # Required Configuration
 
-Python 3.12 x64, .[voice,openrouter], installed local speech model, desktop microphone permission, OpenRouter API key and network/available credit. No CUDA or external FFmpeg executable. README contains copy/paste setup and exact local key handling. No secret/config value was printed or committed.
+Python 3.12 Windows environment with existing voice/openrouter extras, local STT model, microphone permission, OpenRouter key and internet. edge-tts and PyQt6 are already declared in the openrouter extra. No additional TTS key, environment variable or model download.
 
 # Next Milestone
 
-Stop for manual testing and commit. Follow user direction after review.
-
-READY FOR MANUAL TEST — CALLOUT BUBBLE
+Stop for manual testing and user commit. No further development until instructed.

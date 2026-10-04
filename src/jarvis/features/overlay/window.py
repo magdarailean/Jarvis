@@ -159,6 +159,13 @@ class OverlayWindow(QWidget):
         for item in self.annotations:
             if item.visible:
                 self._paint_annotation(painter, item)
+        for item, layout in self.displayed_callouts():
+            paint_callout(painter, item, layout, self.callout_timing.count(item.id))
+        painter.end()
+
+    def displayed_callouts(self):
+        """Return safe callouts in the exact order used by painting and speech."""
+        result = []
         occupied = []
         protected = [QRectF(t[0]*self.width(), t[1]*self.height(),
                             (t[2]-t[0])*self.width(), (t[3]-t[1])*self.height())
@@ -167,9 +174,9 @@ class OverlayWindow(QWidget):
             if item.visible:
                 layout = arrange(item, self.width(), self.height(), occupied, protected)
                 if layout is not None:
-                    paint_callout(painter, item, layout, self.callout_timing.count(item.id))
+                    result.append((item, layout))
                     occupied.append(layout.bubble)
-        painter.end()
+        return result
 
     def _paint_annotation(self, painter: QPainter, item: Annotation) -> None:
         x1, y1, x2, y2 = item.bounds

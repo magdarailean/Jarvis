@@ -24,6 +24,22 @@ class CalloutTiming(QObject):
                                  now+duration+self.lifetime if item.temporary else None)
         self._schedule()
 
+    def hold(self, identifier):
+        """Suspend expiry without restarting the typewriter; return a release token."""
+        entry = self.entries.get(identifier)
+        if entry is None:
+            return None
+        held = (*entry[:3], None)
+        self.entries[identifier] = held
+        self._schedule()
+        return held
+
+    def release(self, identifier, token, delay=5.0):
+        # A removed/replaced callout must not inherit an older speech deadline.
+        if token is not None and self.entries.get(identifier) is token:
+            self.entries[identifier] = (*token[:3], self.clock()+delay)
+            self._schedule()
+
     def count(self, identifier):
         entry = self.entries.get(identifier)
         if entry is None:
