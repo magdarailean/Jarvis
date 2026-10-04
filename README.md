@@ -1,5 +1,10 @@
 # Jarvis
 
+**Optional cursor accuracy adapter:** run `.\.venv\Scripts\python.exe -B -m jarvis.cursor_guide`
+for the OpenRouter cursor prototype with separate target localization. See
+[CURSOR_TARGETING.md](CURSOR_TARGETING.md) for calibration, costs and manual checks.
+This is separate from the main shell described below.
+
 A Windows desktop assistant and tutor for Romanian-speaking users, primarily in Moldova.
 
 **Current state: Part 5, background push-to-talk through the AI boundary.** Hold **Ctrl+Shift+Space** in another application: Jarvis starts Ion's recorder and automatically captures that application's monitor once. Release to stop recording and transcribe Romanian speech. A prepared interaction contains the question, screenshot, session history, mode and annotations. **No AI provider is called or implemented.** Idle operation never records the microphone or screen.

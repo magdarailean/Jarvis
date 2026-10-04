@@ -1,5 +1,64 @@
 # Current Part
 
+## Cursor accuracy review on test
+
+Latest regression follow-up: user reports the generic localization warning instead
+of a previously working Google target. Removed crop refinement from the launcher,
+restoring the earlier full-image locator while keeping completion/loop protections.
+The screenshot alone cannot identify the exact cause because all failures formerly
+shared one message. Added distinct safe diagnostics for absent targets, HTTP,
+network, invalid responses and internal errors. No fallback to planner guesses.
+27 focused tests pass, including a real worker regression check proving a tiny
+full-image target needs only one locator call and cannot be vetoed by crop refinement.
+Live desktop retest remains required. Owner source unchanged; no commits.
+
+Current follow-up: user confirmed improved location but reported relaunch/repeat
+loops while browser windows load and after goals are achieved. Added explicit
+goal state/evidence, stable control/effect identities, completed/failed-cycle
+guards, up to two delayed loading snapshots, and a clear Gata completion response.
+The magnified crop refinement introduced in that follow-up is now disconnected
+from normal launches; see the regression follow-up above.
+These changes are confined to the outside-owner adapter, tests and documentation.
+Shared docs changed in this follow-up: STATUS, ARCHITECTURE, CURSOR_TARGETING.
+Real browser/Canva accuracy still requires manual testing; no live API charges,
+audio or desktop captures were used in tests. Branch remains test; no commits.
+
+Current validation: 25 focused tests passed (17 cursor/credential/progress tests
+plus eight targeting tests). Qt integration covers bounded loading rechecks,
+pending evidence retention, completion cleanup and stale-result rejection.
+Refinement tests cover landscape/portrait transforms, cancellation and conflicting
+locations. Launcher help, owner-folder diff and whitespace checks passed.
+
+Key-loading follow-up: added `--prompt-key` for hidden input in the same Python
+process and startup key validation before hotkeys. `--check-key` performs an
+optional read-only authentication request, with sanitized errors. Five focused
+credential tests cover startup propagation, invalid input and request/error
+handling. Missing-key CLI behavior was verified locally; no live key was supplied
+or real authentication request made. No owner files or credentials were changed.
+
+Added an outside-owner launcher with 1920-pixel image limit, independent structured
+target localization, strict coordinate validation and fail-closed pointing. Includes
+an offline nine-point alignment check. See [CURSOR_TARGETING.md](CURSOR_TARGETING.md).
+Main shell and CursorMain source remain unchanged. Live Canva accuracy needs manual
+retesting; no paid requests or real microphone/capture used by automated tests.
+No commits created. Stop here for manual review after verification.
+
+Manual follow-up: the user reports correct button names but incorrect positions
+with the adapter. Changed the locator contract from pixels to Gemini's documented
+0..1000 `[ymin, xmin, ymax, xmax]` convention. This addresses a plausible scale
+mismatch; the actual failed response was not available to prove it. Added an
+opt-in screenshot/rectangle inspector so the next failure can be distinguished
+from cursor mapping. No extra API requests were added by this revision.
+
+Validation: eight targeting tests and one isolated integration test passed. The
+integration check exercises Ion's real worker with fake transport, malformed
+planner repair, crop mapping and nine actual pointer animation endpoints using
+Qt's offscreen platform, plus preview painting, aspect ratio and cleanup before
+capture/cancellation. Launcher help and `git diff --check` passed. CursorMain
+has no diff. Physical monitor alignment and paid-model accuracy remain manual.
+
+## Previous shell milestone
+
 **Part 5 — Background push-to-talk through the AI boundary.** Implemented 2026-10-04; ready for code/manual review. No commits created. Stop after this part for the user's review/commit.
 
 `git pull --ff-only` confirmed the branch was up to date at `6ca704b`. The working tree was initially clean. Inspected all owner additions, project docs, session/capture/overlay and lifecycle flow before editing. Ion's merged folder is named `CursorMain`, not `Ion`; the entire folder was treated as read-only and has no diff.

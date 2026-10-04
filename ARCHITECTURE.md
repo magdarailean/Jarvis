@@ -1,5 +1,30 @@
 # Architecture
 
+## Optional cursor accuracy adapter
+
+`python -m jarvis.cursor_guide` runs Ion's version 4 prototype in a separate PyQt6
+process, outside the PySide6 shell. `features/targeting/grounding.py` adds a
+framework-independent location request after planning and maps validated
+`[ymin, xmin, ymax, xmax]` bounds on the explicit 0..1000 scale to normalized
+screenshot coordinates. Optional `--inspect-target` shows only the latest encoded
+image with both rectangles, clears on cancellation and hides before capture.
+The owner still handles cropping,
+monitor mapping, pointer animation, speech and request lifetime. The launcher
+adapts the owner module in memory without editing CursorMain. Calibration uses
+the real owner pointer on a synthetic grid. See CURSOR_TARGETING.md for coupling,
+privacy, request costs and remaining accuracy limitations.
+
+`targeting/progress.py` extends only the runtime planner contract with goal-state
+evidence and control/effect identities. It intercepts loading responses without
+consuming pending click evidence, schedules at most two rechecks through the
+owner's existing single-shot settle timer, and blocks repeated effects independently
+of exact screenshot hashes. Completion still requires model evidence and honest
+pending-action verification. Experimental `refinement.py` is no longer connected
+to the launcher after a reported rejection regression. Normal location uses the
+full image only. Fixed diagnostic categories distinguish absent targets from
+transport or response-validation failures without exposing request/response data.
+No changes to owner source, STT, the main PySide6 shell, or idle capture behavior.
+
 ## Selected stack
 
 Python 3.12+ (64-bit), PySide6 / Qt Widgets, Windows 10/11. Qt supplies the desktop window, native tray, accessibility, DPI scaling and future transparent overlays. Only `PySide6-Essentials` 6.11.2 and matching `shiboken6` are required, isolated in `.venv`. No Qt Addons, browser runtime, server, database or .NET dependency. [Qt setup](https://doc.qt.io/qtforpython-6/gettingstarted.html).
