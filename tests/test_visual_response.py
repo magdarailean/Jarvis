@@ -34,13 +34,14 @@ class VisualResponseTests(unittest.TestCase):
         self.controller.deleteLater()
         self.temp.cleanup()
 
-    def respond(self, actions):
-        request = self.controller.session.begin('Explică-mi aici.')
+    def respond(self, actions, question='Ajută-mă aici.'):
+        request = self.controller.session.begin(question)
         self.assertTrue(self.controller.accept_ai_response(request.id, {'text': 'Răspuns normal.', 'actions': actions}))
         return request
 
     def test_real_overlay_callout_has_no_artificial_target_and_preserves_text(self):
-        self.respond([{'type': 'callout', 'id': 'step1', 'text': 'Aici.', 'target': [.4, .4, .5, .5]}])
+        self.respond([{'type': 'callout', 'id': 'step1', 'text': 'Aici.', 'target': [.4, .4, .5, .5],
+                       'target_text': 'x + 3', 'target_confidence': .95}])
         overlay = self.controller.overlay
         self.assertEqual(overlay.annotations, ())
         self.assertEqual(len(overlay.callouts), 1)
@@ -67,9 +68,11 @@ class VisualResponseTests(unittest.TestCase):
     def test_combinations_and_pointer_boundary(self):
         pointers = []
         self.controller.pointer_requested.connect(pointers.append)
-        actions = [{'type': kind, 'id': kind, 'target': [.1, .2, .3, .4]}
+        actions = [{'type': kind, 'id': kind, 'target': [.1, .2, .3, .4],
+                    'target_text': 'visible item', 'target_confidence': .95}
                    for kind in ('highlight', 'arrow', 'rectangle', 'circle', 'line')]
-        actions.append({'type': 'pointer/cursor', 'id': 'pointer', 'target': [.5, .5, .5, .5]})
+        actions.append({'type': 'pointer/cursor', 'id': 'pointer', 'target': [.5, .5, .6, .6],
+                        'target_text': 'Open', 'target_confidence': .95})
         self.respond(actions)
         self.assertEqual(len(self.controller.overlay.annotations), 5)
         self.assertEqual(len(pointers), 1)

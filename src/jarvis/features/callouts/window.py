@@ -1,5 +1,6 @@
 """Isolated, click-through callout layer. No cursor imports or hooks."""
 import math
+from shiboken6 import isValid
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF, QPalette, QAbstractTextDocumentLayout, QTextCursor
@@ -68,8 +69,10 @@ class CalloutOverlay(QWidget):
 
     def invalidate(self, *_):
         self.clear()
-        if self.target_screen is not None:
+        if self.target_screen is not None and isValid(self.target_screen):
             self.setGeometry(self.target_screen.geometry())
+        else:
+            self.target_screen = None
 
     def screen_removed(self, screen):
         if screen is self.target_screen:

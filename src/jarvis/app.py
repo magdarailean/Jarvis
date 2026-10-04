@@ -18,6 +18,7 @@ from jarvis.features.session import Session
 from jarvis.features.hotkey.windows import GlobalHotkey
 from jarvis.features.voice_input.ion_adapter import IonAdapter
 from jarvis.features.interaction.controller import InteractionController
+from jarvis.features.interaction.intent import VisualIntent
 from jarvis.features.interaction.desktop import StatusIndicator, foreground_screen
 from jarvis.features.callouts.model import VisualPlan
 from jarvis.features.ai.openrouter import OpenRouterProvider
@@ -31,7 +32,7 @@ class DesktopController(QObject):
 
     def __init__(self, app: QApplication, *, instance_key: str | None = None,
                  tray_factory=TrayIcon, log: AppLog | None = None, enable_voice=False,
-                 background=False, voice_factory=IonAdapter, hotkey_factory=GlobalHotkey,
+                 background=False, voice_only=False, voice_factory=IonAdapter, hotkey_factory=GlobalHotkey,
                  provider_factory=OpenRouterProvider) -> None:
         super().__init__()
         self.app = app
@@ -46,9 +47,12 @@ class DesktopController(QObject):
         self.pointer_bridge = PointerBridge(self)
         self.pointer_requested.connect(self._show_pointer)
         self.pointer_bridge.failed.connect(self._pointer_failed)
+        self.pointer_bridge.shown.connect(lambda: self.log.write("visual.pointer = shown"))
         self.provider = provider_factory(self)
         self.provider.succeeded.connect(self._ai_complete)
         self.provider.failed.connect(self._ai_failed)
+        self.provider.diagnostic.connect(
+            lambda identifier, details: self.log.write(f"AI diagnostic; request={identifier}; {details}."))
         self._ai_pending = None
         self._ai_tick = 0
         self._ai_progress = QTimer(self)
@@ -67,6 +71,7 @@ class DesktopController(QObject):
         self._closed = False
         self.enable_voice = enable_voice
         self.background = background
+        self.voice_only = voice_only
         self.voice_factory = voice_factory
         self.hotkey_factory = hotkey_factory
         self.interaction = self.hotkey = self.indicator = None
@@ -96,32 +101,35 @@ class DesktopController(QObject):
             self.close()
             return False
 
-        self.window = MainWindow()
-        self.window.setWindowIcon(create_icon())
-        self.window.exit_requested.connect(self.request_exit)
-        self.window.overlay_demo_requested.connect(self.show_overlay_demo)
-        self.window.overlay_clear_requested.connect(self.clear_overlay)
-        self.window.capture_requested.connect(self.start_capture)
-        self.window.capture_clear_requested.connect(self.release_capture)
-        self.window.session_panel.question_submitted.connect(self.submit_question)
-        self.window.session_panel.end_requested.connect(self.end_session)
-        self.window.session_panel.mode_changed.connect(self._session_mode_changed)
-        self.window.hidden_to_tray.connect(
-            lambda: self.log.write("Main window hidden; tray remains active.")
-        )
+        if not self.voice_only:
+            self.window = MainWindow()
+            self.window.setWindowIcon(create_icon())
+            self.window.exit_requested.connect(self.request_exit)
+            self.window.overlay_demo_requested.connect(self.show_overlay_demo)
+            self.window.overlay_clear_requested.connect(self.clear_overlay)
+            self.window.capture_requested.connect(self.start_capture)
+            self.window.capture_clear_requested.connect(self.release_capture)
+            self.window.session_panel.question_submitted.connect(self.submit_question)
+            self.window.session_panel.end_requested.connect(self.end_session)
+            self.window.session_panel.mode_changed.connect(self._session_mode_changed)
+            self.window.hidden_to_tray.connect(
+                lambda: self.log.write("Main window hidden; tray remains active.")
+            )
         try:
-            self.tray = self.tray_factory(self.reopen_window, self.request_exit)
-            self.window.enable_background_mode()
+            self.tray = self.tray_factory(None if self.voice_only else self.reopen_window, self.request_exit)
+            if self.window is not None:
+                self.window.enable_background_mode()
             self.log.write("Tray created; state=Ready.")
         except (OSError, RuntimeError) as error:
             self.log.write(f"Tray initialization failed; error={type(error).__name__}.")
-            self.window.show_tray_unavailable()
+            if self.window is not None:
+                self.window.show_tray_unavailable()
 
         if self.enable_voice:
             self._start_voice_pipeline()
-        if not self.background or self.tray is None:
+        if self.window is not None and (not self.background or self.tray is None):
             self.window.show()
-        self.log.write("Main window loaded; state=Ready.")
+        self.log.write(f"Runtime ready; voice_only={self.voice_only}; state=Ready; pid={os.getpid()}; visual_pipeline=4.")
         self.instance.listen(self.activation_requested.emit)
         return True
 
@@ -129,7 +137,8 @@ class DesktopController(QObject):
         self.indicator = StatusIndicator()
         voice = self.voice_factory(self)
         self.interaction = InteractionController(self.session, voice, self)
-        self.interaction.capture.frame_changed.connect(self.window.show_capture)
+        if self.window is not None:
+            self.interaction.capture.frame_changed.connect(self.window.show_capture)
         self.interaction.state_changed.connect(self._voice_state)
         self.interaction.failed.connect(self._voice_failed)
         self.interaction.prepared.connect(self._voice_prepared)
@@ -138,10 +147,11 @@ class DesktopController(QObject):
         voice.ready.connect(lambda: self._voice_state("Gata", False))
         try:
             self.hotkey = self.hotkey_factory(self.app, os.environ.get("JARVIS_HOTKEY", "Ctrl+Shift+Space"))
-            self.window.activation_hint.setText(
-                f"Ține apăsat {os.environ.get('JARVIS_HOTKEY', 'Ctrl+Shift+Space')} în aplicația ta, "
-                "vorbește și eliberează. Întrebarea și captura sunt trimise către OpenRouter."
-            )
+            if self.window is not None:
+                self.window.activation_hint.setText(
+                    f"Ține apăsat {os.environ.get('JARVIS_HOTKEY', 'Ctrl+Shift+Space')} în aplicația ta, "
+                    "vorbește și eliberează. Întrebarea și captura sunt trimise către OpenRouter."
+                )
             self.hotkey.pressed.connect(self._push_to_talk)
             self.hotkey.released.connect(self.interaction.release)
             self.hotkey.start()
@@ -174,7 +184,8 @@ class DesktopController(QObject):
         self.pointer_bridge.hide()
         self._voice_capture_hidden = True
         self._voice_overlay_visible = self.overlay is not None and self.overlay.isVisible()
-        self.window.hide()
+        if self.window is not None:
+            self.window.hide()
         self.indicator.hide()
         if self.overlay is not None:
             self.overlay.hide()
@@ -193,7 +204,8 @@ class DesktopController(QObject):
         if self._closed:
             return
         self._voice_status = status
-        self.window.session_panel.render(self.session)
+        if self.window is not None:
+            self.window.session_panel.render(self.session)
         self._set_capture_status(status)
         if self.tray is not None:
             self.tray.set_status(status, microphone)
@@ -205,13 +217,15 @@ class DesktopController(QObject):
         if self._closed:
             return
         self._voice_state("Eroare", False)
-        self.window.session_panel.feedback.setText(message)
+        if self.window is not None:
+            self.window.session_panel.feedback.setText(message)
         self.indicator.display(message, foreground_screen(self.app))
         self.log.write("Voice interaction failed; see local configuration and device status.")
 
     def _voice_prepared(self, request):
-        self.window.session_panel.render(self.session)
-        self.window.show_capture(request.frame)
+        if self.window is not None:
+            self.window.session_panel.render(self.session)
+            self.window.show_capture(request.frame)
         self._submit_ai(request)
 
     def _ai_status(self, text):
@@ -237,6 +251,9 @@ class DesktopController(QObject):
 
     def _submit_ai(self, request):
         self._ai_pending = request.id
+        self.log.write(f"visual.intent = {request.visual_intent.value}")
+        if request.visual_intent == VisualIntent.EXPLAIN:
+            self.pointer_bridge.hide()
         visuals = []
         if self.overlay is not None:
             for item in self.overlay.callouts:
@@ -307,7 +324,10 @@ class DesktopController(QObject):
         request = self.session.pending
         if self._closed or request is None or request.id != request_id:
             return False
-        plan = VisualPlan.parse(payload)
+        plan = VisualPlan.parse(payload, intent=request.visual_intent, require_grounding=True)
+        self.log.write(f"Visual plan validated; intent={request.visual_intent.value}; "
+                       f"pointers={sum(a.kind.value == 'pointer/cursor' for a in plan.actions)}; "
+                       f"callouts={sum(a.kind.value == 'callout' for a in plan.actions)}.")
         try:
             if not self.session.complete(request_id, plan.text):
                 return False
@@ -317,6 +337,10 @@ class DesktopController(QObject):
             self.window.session_panel.render(self.session)
         self.answer_ready.emit(plan.text)
         self._set_capture_status("Gata")
+        if request.visual_intent == VisualIntent.EXPLAIN:
+            self.pointer_bridge.hide()
+        if self.overlay is not None and request.visual_intent != VisualIntent.AUTO:
+            self.overlay.clear_temporary_callouts()
         if request.frame is None or not any(action.kind.value != "none" for action in plan.actions):
             return True
         geometry = request.frame.geometry
@@ -574,7 +598,7 @@ def main() -> int:
     from jarvis.local_config import load_local_config
     load_local_config()
     app = create_application()
-    controller = DesktopController(app, enable_voice=True, background="--window" not in sys.argv)
+    controller = DesktopController(app, enable_voice=True, background=True, voice_only=True)
     try:
         if not controller.start():
             return controller.exit_code

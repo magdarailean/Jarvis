@@ -2,6 +2,7 @@
 
 import math
 from dataclasses import replace
+from shiboken6 import isValid
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QScreen
@@ -61,10 +62,15 @@ class OverlayWindow(QWidget):
         return any(item.visible for item in (*self.annotations, *self.callouts))
 
     def apply_visual_plan(self, plan):
+        if any(action.kind == VisualKind.CALLOUT for action in plan.actions):
+            self.clear_temporary_callouts()
         for action in plan.actions:
             try:
                 if action.kind == VisualKind.CALLOUT:
                     if self._target_screen is None:
+                        continue
+                    if (action.id not in {item.id for item in self.callouts}
+                            and sum(item.visible for item in self.callouts) >= 2):
                         continue
                     self._callouts.upsert(action.callout)
                     self.callout_timing.start(action.callout)
@@ -133,8 +139,10 @@ class OverlayWindow(QWidget):
 
     def _display_changed(self, *_args) -> None:
         self.clear()
-        if self._target_screen is not None:
+        if self._target_screen is not None and isValid(self._target_screen):
             self.setGeometry(self._target_screen.geometry())
+        else:
+            self._target_screen = None
 
     def _screen_removed(self, screen: QScreen) -> None:
         if screen is self._target_screen:
@@ -152,9 +160,12 @@ class OverlayWindow(QWidget):
             if item.visible:
                 self._paint_annotation(painter, item)
         occupied = []
+        protected = [QRectF(t[0]*self.width(), t[1]*self.height(),
+                            (t[2]-t[0])*self.width(), (t[3]-t[1])*self.height())
+                     for item in self.callouts if item.visible and (t := item.target) is not None]
         for item in self.callouts:
             if item.visible:
-                layout = arrange(item, self.width(), self.height(), occupied)
+                layout = arrange(item, self.width(), self.height(), occupied, protected)
                 if layout is not None:
                     paint_callout(painter, item, layout, self.callout_timing.count(item.id))
                     occupied.append(layout.bubble)

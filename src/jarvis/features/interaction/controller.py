@@ -101,6 +101,9 @@ class InteractionController(QObject):
         if not text.strip():
             self._fail("Nu am auzit o întrebare. Ține apăsată comanda rapidă și încearcă din nou.")
             return
+        if not any(character.isalnum() for character in text):
+            self._fail("Nu am recunoscut cuvinte în înregistrare. Verifică microfonul și repetă comanda.")
+            return
         if self._frame is None and not self.capture.pending:
             self._fail("Activarea a fost prea scurtă. Încearcă din nou.")
             return

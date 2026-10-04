@@ -12,10 +12,17 @@ from PySide6.QtWidgets import QApplication
 
 from jarvis.app import create_application
 from jarvis.features.voice_input.ion_adapter import IonAdapter
-from jarvis.features.voice_input.ion_worker import RecordingControl, load_ion
+from jarvis.features.voice_input.ion_worker import RecordingControl, load_ion, SpeechOnlyModel
 
 
 class AdapterTests(unittest.TestCase):
+    def test_speech_filter_preserves_romanian_decoder_options(self):
+        model = Mock()
+        wrapper = SpeechOnlyModel(model)
+        wrapper.transcribe('audio', language='ro', beam_size=5, temperature=0.0)
+        model.transcribe.assert_called_once_with('audio', language='ro', beam_size=5,
+            temperature=0.0, vad_filter=True, condition_on_previous_text=False)
+
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or create_application()

@@ -4,6 +4,8 @@ from enum import Enum
 import math
 import re
 
+from jarvis.features.interaction.intent import VisualIntent
+
 
 class VisualKind(str, Enum):
     NONE = "none"
@@ -38,7 +40,7 @@ class Callout:
         if self.target is not None:
             if not isinstance(self.target, tuple) or len(self.target) != 4:
                 raise ValueError("Expected normalized region or repeated point")
-            if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in self.target):
+            if any(type(v) not in (int, float) or not 0 <= v <= 1 or not math.isfinite(v) for v in self.target):
                 raise ValueError("Invalid coordinates")
             x1, y1, x2, y2 = self.target
             if x2 < x1 or y2 < y1:
@@ -92,7 +94,7 @@ class VisualPlan:
     actions: tuple[VisualAction, ...] = ()
 
     @classmethod
-    def parse(cls, payload):
+    def parse(cls, payload, *, intent=VisualIntent.AUTO, require_grounding=False):
         if not isinstance(payload, dict):
             return cls("")
         text = payload.get("text", "")
@@ -103,12 +105,48 @@ class VisualPlan:
                 if not isinstance(item, dict):
                     continue
                 try:
+                    kind = VisualKind(item.get("type"))
+                    if intent == VisualIntent.GUIDE and kind != VisualKind.POINTER:
+                        continue
+                    if intent == VisualIntent.EXPLAIN and kind != VisualKind.CALLOUT:
+                        continue
+                    if kind == VisualKind.CALLOUT and sum(a.kind == kind for a in result) >= 2:
+                        continue
+                    if kind == VisualKind.POINTER and any(a.kind == kind for a in result):
+                        continue
                     target = item.get("target")
-                    result.append(VisualAction(VisualKind(item.get("type")), item.get("id", ""),
+                    if require_grounding and target is not None:
+                        # Numeric bounds alone do not establish that a target is
+                        # relevant. Require explicit screenshot evidence as well.
+                        evidence = item.get("target_text")
+                        confidence = item.get("target_confidence")
+                        grounded = (isinstance(evidence, str) and bool(evidence.strip())
+                                    and type(confidence) in (int, float)
+                                    and .85 <= confidence <= 1)
+                        if kind in (VisualKind.CALLOUT, VisualKind.POINTER):
+                            bounds = tuple(target) if isinstance(target, list) else target
+                            Callout("validation", "target", bounds)
+                            x1, y1, x2, y2 = bounds
+                            grounded = grounded and x1 < x2 and y1 < y2 and (x2-x1)*(y2-y1) <= .4
+                        if not grounded:
+                            if kind != VisualKind.CALLOUT:
+                                continue
+                            target = None  # Keep the explanation, never guess an arrow.
+                    result.append(VisualAction(kind, item.get("id", ""),
                                               tuple(target) if isinstance(target, list) else target,
                                               item.get("text", ""), item.get("placement", "auto")))
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, OverflowError):
                     continue
+        if (intent == VisualIntent.EXPLAIN and not result and isinstance(text, str)
+                and text.strip() and len(text) <= 2000):
+            result.append(VisualAction(VisualKind.CALLOUT, "explanation", text=text))
+        # With no answer panel, a single explanation bubble must not discard
+        # the teaching steps that the model put only in its full answer.
+        if (intent != VisualIntent.GUIDE and len(result) == 1
+                and result[0].kind == VisualKind.CALLOUT
+                and isinstance(text, str) and 0 < len(text.strip()) <= 2000
+                and len(text.strip()) > len(result[0].text)):
+            result[0] = replace(result[0], text=text.strip())
         return cls(text if isinstance(text, str) else "", tuple(result))
 
 

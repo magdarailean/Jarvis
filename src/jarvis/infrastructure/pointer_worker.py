@@ -36,6 +36,7 @@ def main():
             elif command.get('command') == 'point':
                 screen = next((s for s in app.screens() if s.name() == command.get('monitor')), None)
                 if screen is None:
+                    print(json.dumps(dict(event='target_unavailable')), flush=True)
                     continue
                 # Same public input/mapping as GuideController; no targeting changes.
                 left, top, right, bottom = command['target']
@@ -44,6 +45,7 @@ def main():
                 pointer.set_mode('pointing')
                 pointer.point_at(geometry.x()+(left+right)*geometry.width()/2,
                                  geometry.y()+(top+bottom)*geometry.height()/2)
+                print(json.dumps(dict(event='pointed')), flush=True)
 
     threading.Thread(target=read, daemon=True).start()
     timer = QTimer()

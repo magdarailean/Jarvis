@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 class CalloutTiming(QObject):
     changed = Signal()
     expired = Signal(str)
-    LIFETIME_SECONDS = 20.0
+    LIFETIME_SECONDS = 15.0
 
     def __init__(self, parent=None, *, clock=time.monotonic, lifetime=LIFETIME_SECONDS):
         super().__init__(parent)
@@ -20,7 +20,8 @@ class CalloutTiming(QObject):
     def start(self, item):
         now = self.clock()
         duration = min(1.2, max(.08, len(item.text)/100))
-        self.entries[item.id] = (now, duration, len(item.text), now+self.lifetime if item.temporary else None)
+        self.entries[item.id] = (now, duration, len(item.text),
+                                 now+duration+self.lifetime if item.temporary else None)
         self._schedule()
 
     def count(self, identifier):

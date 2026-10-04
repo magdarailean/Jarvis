@@ -37,17 +37,21 @@ class CalloutTimingTests(unittest.TestCase):
         self.overlay.apply_visual_plan(VisualPlan.parse({'text': 'Answer', 'actions': [
             {'type': 'callout', 'id': 'one', 'text': 'O explicație suficient de lungă.', 'target': [.4, .4, .5, .5]}]}))
 
-    def test_progress_expiry_20_seconds_and_safe_repeat_removal(self):
+    def test_expiry_is_15_seconds_after_reveal_and_safe_repeat_removal(self):
         self.add()
         timing = self.overlay.callout_timing
         self.assertEqual(timing.count('one'), 0)
         self.now[0] = .12
         self.assertGreater(timing.count('one'), 0)
         self.assertLess(timing.count('one'), len(self.overlay.callouts[0].text))
-        self.now[0] = 19.99
+        duration = timing.entries['one'][1]
+        self.assertEqual(timing.lifetime, 15)
+        self.now[0] = duration
+        self.assertEqual(timing.count('one'), len(self.overlay.callouts[0].text))
+        self.now[0] = duration + 14.99
         timing.tick()
         self.assertEqual(len(self.overlay.callouts), 1)
-        self.now[0] = 20.01
+        self.now[0] = duration + 15.01
         timing.tick()
         self.assertEqual(self.overlay.callouts, ())
         self.assertFalse(timing.timer.isActive())
@@ -121,7 +125,24 @@ class CalloutTimingTests(unittest.TestCase):
         expired = []
         timing.expired.connect(expired.append)
         timing.start(Callout('timer', 'Test'))
-        QTest.qWait(140)
+        QTest.qWait(220)
         self.assertEqual(expired, ['timer'])
         self.assertFalse(timing.timer.isActive())
         timing.clear()
+
+    def test_production_overlay_reveals_without_relayout_and_cancels(self):
+        self.add()
+        item = self.overlay.callouts[0]
+        bounds = arrange(item, self.overlay.width(), self.overlay.height()).bubble
+        images = []
+        for now in (0, .12, 1.25):
+            self.now[0] = now
+            self.overlay.callout_timing.tick()
+            images.append(self.overlay.grab().toImage())
+            self.assertEqual(arrange(item, self.overlay.width(), self.overlay.height()).bubble, bounds)
+        self.assertNotEqual(images[0], images[1])
+        self.assertNotEqual(images[1], images[2])
+        self.overlay.clear_temporary_callouts()
+        self.assertFalse(self.overlay.callout_timing.timer.isActive())
+        self.overlay.callout_timing.tick()
+        self.assertEqual(self.overlay.callouts, ())

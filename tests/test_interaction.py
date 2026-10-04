@@ -159,6 +159,17 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.contexts, [])
         self.assertFalse(self.pipeline.active)
 
+    def test_punctuation_hallucination_never_reaches_ai(self):
+        token = self.activate()
+        self.capture.deliver()
+        errors = []
+        self.pipeline.failed.connect(errors.append)
+        self.voice.transcribed.emit(token, ')' * 200)
+        self.assertEqual(self.contexts, [])
+        self.assertIsNone(self.session.pending)
+        self.assertFalse(self.pipeline.active)
+        self.assertIn('Nu am recunoscut cuvinte', errors[0])
+
     def test_unconfigured_voice_does_not_start_capture_or_recording(self):
         self.voice.available = False
         self.pipeline.press(self.app.primaryScreen())

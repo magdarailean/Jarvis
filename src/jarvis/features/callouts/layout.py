@@ -10,6 +10,7 @@ from .model import Callout
 PAD = 16
 MARGIN = 12
 GAP = 28
+MAX_LEADER = 180
 
 
 def document(text, width):
@@ -35,7 +36,7 @@ class CalloutLayout:
     text: QTextDocument
 
 
-def arrange(item: Callout, width: float, height: float, occupied=()):
+def arrange(item: Callout, width: float, height: float, occupied=(), protected=()):
     if width <= 2 * MARGIN or height <= 2 * MARGIN:
         return None
     screen = QRectF(MARGIN, MARGIN, width - 2 * MARGIN, height - 2 * MARGIN)
@@ -47,6 +48,7 @@ def arrange(item: Callout, width: float, height: float, occupied=()):
     if item.placement != "auto":
         sides.remove(item.placement)
         sides.insert(0, item.placement)
+    obstacles = [*occupied, *protected]
     for side in sides:
         area = QRectF(screen)
         if target is not None:
@@ -66,7 +68,8 @@ def arrange(item: Callout, width: float, height: float, occupied=()):
         bubble_height = math.ceil(doc.size().height()) + 2 * PAD
         if bubble_height > area.height():
             continue
-        center = target.center() if target is not None else screen.center()
+        center = target.center() if target is not None else QPointF(
+            screen.right()-bubble_width/2, screen.top()+bubble_height/2)
         x = min(max(center.x() - bubble_width/2, area.left()), area.right()-bubble_width)
         y = min(max(center.y() - bubble_height/2, area.top()), area.bottom()-bubble_height)
         if target is not None:
@@ -75,16 +78,16 @@ def arrange(item: Callout, width: float, height: float, occupied=()):
             elif side == "above": y = area.bottom() - bubble_height
             else: y = area.top()
         bubble = QRectF(x, y, bubble_width, bubble_height)
-        if any(bubble.intersects(other) for other in occupied):
+        if any(bubble.intersects(other) for other in obstacles):
             candidates = []
-            for other in occupied:
+            for other in obstacles:
                 for offset in (-1, 1):
                     candidate = QRectF(bubble)
                     if side in ("left", "right"):
                         candidate.moveTop(other.top()-bubble_height-8 if offset < 0 else other.bottom()+8)
                     else:
                         candidate.moveLeft(other.left()-bubble_width-8 if offset < 0 else other.right()+8)
-                    if area.contains(candidate) and not any(candidate.intersects(r) for r in occupied):
+                    if area.contains(candidate) and not any(candidate.intersects(r) for r in obstacles):
                         candidates.append(candidate)
             if not candidates:
                 continue
@@ -99,6 +102,8 @@ def arrange(item: Callout, width: float, height: float, occupied=()):
                 sx = min(max(center.x(), bubble.left()+12), bubble.right()-12)
                 start = QPointF(sx, bubble.bottom() if side == "above" else bubble.top())
                 end = QPointF(center.x(), target.top() if side == "above" else target.bottom())
+            if math.hypot(end.x()-start.x(), end.y()-start.y()) > MAX_LEADER:
+                continue  # Try another side instead of drawing a distant leader.
         return CalloutLayout(bubble, target, start, end, doc)
     # No safe fit: caller retains answer/state, but suppresses this visual.
     return None
