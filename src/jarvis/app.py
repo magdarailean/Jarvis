@@ -18,7 +18,7 @@ from jarvis.features.session import Session
 from jarvis.features.hotkey.windows import GlobalHotkey
 from jarvis.features.voice_input.ion_adapter import IonAdapter
 from jarvis.features.interaction.controller import InteractionController
-from jarvis.features.interaction.intent import VisualIntent
+from jarvis.features.interaction.intent import VisualIntent, is_guide_followup
 from jarvis.features.interaction.guide import GuideSession
 from jarvis.features.interaction.desktop import StatusIndicator, foreground_screen
 from jarvis.features.callouts.model import VisualPlan
@@ -448,7 +448,11 @@ class DesktopController(QObject):
         self._clear_speech_caption()
         self.speech.stop()
         if request.guide_context is None and self.guide.active:
-            if request.visual_intent == VisualIntent.EXPLAIN:
+            if (request.visual_intent == VisualIntent.EXPLAIN
+                    or not is_guide_followup(request.question)):
+                # A new task replaces the old goal; only short contextual
+                # follow-ups inherit it. Click-driven requests already carry
+                # guide_context and bypass this branch.
                 self._guide_stop()
             elif request.frame is not None:
                 request = self.session.set_guide_context(request.id, self.guide.context(request.frame))

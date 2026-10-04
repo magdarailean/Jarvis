@@ -153,5 +153,16 @@ or stale screen context remains wrong. No live paid API calls were made in tests
 The adapter imports the owner module without writing bytecode and substitutes
 its request boundary and image-size setting only in its own process. This is a
 temporary integration seam, coupled to version 4. All files under `CursorMain`
-remain unchanged; no STT implementation was added. Main shell production files
-are unchanged. Shared documentation changed: README, STATUS and ARCHITECTURE.
+remain unchanged; no STT implementation was added.
+
+## Main-app integration on test
+
+Normal `python -m jarvis` now uses this same full-image locator for eligible
+pointer actions. Its Qt OpenRouter transport shares the request builder and
+0..1000 conversion with the companion. Only the resulting pointer target changes;
+the merged main app retains its explanation/callout behavior, speech, captions,
+GUIDE progression and pointer lifetime. The existing pointer bridge already used
+Ion's original animation and coordinate mapping, so it required no changes.
+The main app adds one location request per pointer step within its existing
+overall timeout. It does not adopt the companion's separate progress guards or
+diagnostic window. No live accuracy claim follows from automated tests.

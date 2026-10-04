@@ -61,8 +61,9 @@ def normalized_bounds(response: str, width: int, height: int) -> dict | None:
                 right=right / 1000, bottom=bottom / 1000)
 
 
-def locate(api_key, image, instruction, width, height, model, mime):
-    payload = {
+def build_location_payload(image, instruction, width, height, model, mime):
+    """Shared wire contract for the companion and main app's Qt transport."""
+    return {
         "model": model,
         "messages": [
             {"role": "system", "content": LOCATION_PROMPT},
@@ -79,6 +80,10 @@ def locate(api_key, image, instruction, width, height, model, mime):
         "provider": {"require_parameters": True}, "temperature": 0,
         "max_tokens": 256, "stream": False,
     }
+
+
+def locate(api_key, image, instruction, width, height, model, mime):
+    payload = build_location_payload(image, instruction, width, height, model, mime)
     request = Request("https://openrouter.ai/api/v1/chat/completions",
                       data=json.dumps(payload).encode("utf-8"),
                       headers={"Authorization": "Bearer " + api_key,

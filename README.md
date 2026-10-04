@@ -78,7 +78,7 @@ No idle recording, screenshot stream, automatic clicking or screenshot archive. 
 
 ## Cursor ownership / optional separate companion
 
-The adapter imports `CursorMain/workingVersion4.GuidePointer` in a separate PyQt process with bytecode writing disabled. It calls the existing public point_at API using the same normalized-to-monitor mapping as the companion. No mouse automation, new accuracy algorithm or owner source change. One pointer target can be shown at a time.
+The adapter imports `CursorMain/workingVersion4.GuidePointer` in a separate PyQt process with bytecode writing disabled. It calls the existing public point_at API using the same normalized-to-monitor mapping as the companion. One pointer target can be shown at a time. Before displaying an eligible pointer, the main provider now uses the earlier cursor adapter's independent full-image locator: JPEG at up to 1920 pixels, explicit 0..1000 bounding boxes, then normalized monitor coordinates. No crop refinement, mouse automation or owner source change. This adds one API request per pointer step; explanation-only and completed/waiting responses do not use it. A failed location retains the answer but omits the pointer.
 
 `python -m jarvis.openrouter` still launches the older independent companion, not the main Jarvis flow. Run only one: global shortcuts overlap. Use `python -m jarvis` for this milestone.
 
@@ -107,7 +107,7 @@ Manual check: run normal Jarvis, ask about a visible item, observe the fast prog
 
 Explicit `arată-mi` / `arata-mi` / `unde` requests take priority over explanation terms in the same request. GUIDE restricts AI output and local validation to pointer actions. Clicks hide the previous pointer; after the UI settles Jarvis captures a fresh screen and asks for the next action until visible completion evidence is returned. A click alone is not treated as success.
 
-PTT pauses the guide observer while listening and retains the original goal. Follow-ups such as “Și acum?” continue GUIDE. An explicit explanation-only request such as “Explică-mi acest buton” switches to EXPLAIN. Restart Jarvis after updating the checkout; an already-running process keeps its old code.
+PTT pauses the guide observer while listening. Short contextual follow-ups such as “Și acum?”, “Continuă” and “Arată-mi unde să apăs” retain the goal. A new task such as “Arată-mi cum să deschid internetul” replaces the previous goal and step, even during a Canva guide. Other wording is dispatched as a fresh request with conversation history rather than being forced into the old goal. An explicit explanation-only request such as “Explică-mi acest buton” switches to EXPLAIN. Restart Jarvis after updating the checkout; an already-running process keeps its old code.
 
 GUIDE pointers now stay visible during guidance speech and disappear five seconds after speech finishes or fails. Pointer expiry does not end the task: a subsequent click still triggers fresh-screen analysis. A click or new PTT immediately hides the old pointer and cancels its expiry timer. Next-step pointers receive a fresh speech lifetime. CursorMain and positioning are unchanged.
 
@@ -136,5 +136,6 @@ this launcher loads the main application's `.env` configuration.
 Optional `--calibrate` tests nine pointer positions without AI; `--inspect-target`
 shows an in-memory diagnostic preview; `--check-key` checks authentication without
 a model request. See [CURSOR_TARGETING.md](CURSOR_TARGETING.md) for details, API
-costs, limitations and the adapter's owner review. These targeting changes are not
-integrated into the normal main-app provider by this documentation merge.
+costs, limitations and the adapter's owner review. The normal main-app provider
+now shares its location request and coordinate conversion. The two entry points
+retain their own speech, interface and task-progression behavior.

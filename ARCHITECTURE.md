@@ -6,6 +6,15 @@ Python 3.12 x64 / PySide6 desktop, Windows 10/11. Domain/session models are inde
 
 Global shortcut hold → isolated read-only Ion recorder + one Qt screen capture → release → Romanian local STT → TutorRequest → DesktopController → asynchronous OpenRouterProvider → validated VisualPlan → session text + existing OverlayWindow. Requests include bounded history and current annotation/callout descriptions. Replies require a current request ID; cancellation, session end and stale context prevent late application.
 
+New spoken requests inherit an active GUIDE goal only when the entire normalized
+utterance matches a contextual follow-up in `interaction/intent.py`. Otherwise
+the controller stops the old observer, clears its prior step/loading state and
+routes the new question normally. New GUIDE requests start their own goal;
+click-driven rechecks retain their explicit guide context. Conversation history
+is retained, with provider instructions that old tasks cannot override the active
+goal. This is bounded phrase matching, not a general semantic intent classifier;
+unrecognized follow-up wording is sent as a fresh request with history.
+
 `features/ai/openrouter.py` adapts the generic endpoint/auth/multimodal/strict JSON protocol from the owner's request_openrouter function into a PySide QtNetwork transport. It does not import the cursor companion or modify its provider. Its schema/prompt are for tutoring and VisualPlan, rather than the companion's cursor-specific decision format. One request, no paid retries, bounded response, 45-second inactivity timeout and controller 60-second deadline. No credentials/content logged. HTTP auth/credit/rate errors and malformed responses have Romanian feedback. Environment/.env configuration is unchanged.
 
 ## AI-selected visuals
@@ -55,6 +64,17 @@ full image only. Fixed diagnostic categories distinguish absent targets from
 transport or response-validation failures without exposing request/response data.
 No changes to owner source, STT, the main PySide6 shell, or idle capture behavior.
 
-This adapter is a separate entry point; the main runtime above uses its own
-VisualPlan provider and pointer bridge. Resolving the documentation conflict
-does not replace or unify either targeting path.
+This adapter remains a separate entry point. The main runtime's VisualPlan
+provider now shares `targeting/grounding.build_location_payload` and
+`normalized_bounds` through `ai/pointer_location.py`. After the unchanged planning
+request, an eligible pointer triggers a second cancellable Qt network request:
+the same captured image, aspect-preserving JPEG at maximum edge 1920 and quality
+85, and the pointer instruction without the planner's guessed coordinates.
+Only the pointer target is replaced. Other visuals, explanation text, GUIDE
+completion/loading decisions and existing confidence validation remain unchanged.
+Location failures omit the pointer while retaining the answer. Both phases share
+the existing overall request deadline; cancellation releases context and rejects
+late replies. No crop refinement or new screenshot acquisition is introduced.
+The pointer bridge still calls Ion's original `point_at` animation and maps the
+normalized target center into the captured monitor's logical geometry exactly
+once. Speech, captions, click dismissal and pointer expiry remain unchanged.

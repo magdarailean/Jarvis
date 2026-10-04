@@ -13,7 +13,7 @@ Immediate click dismissal of temporary visual assistance in the real runtime. Ex
 - GUIDE pointer is held during TTS, then hidden after five seconds. Click/PTT clears it immediately and cancels the old timer. Expiry preserves the active goal and click observer. Speech failure also releases the pointer after five seconds.
 - Navigation variants such as “Cum pot închide site-ul?” and “Cum să-l închid?” route to GUIDE. Provider instructions prioritize the spoken task over unrelated screenshot content.
 
-- Explicit arată-mi/arata-mi/unde wins over explanation terms. Active GUIDE survives PTT follow-ups unless the user explicitly requests an explanation. The dispatched request and pending response-validation request share the same GUIDE context.
+- Explicit arată-mi/arata-mi/unde wins over explanation terms. Active GUIDE survives recognized contextual PTT follow-ups; new tasks replace the old guide goal. The dispatched request and pending response-validation request share the same GUIDE context.
 
 - Online edge-tts Romanian Alina synthesis and in-memory audio playback through a cancellable isolated worker.
 - TTS reads exactly the final rendered callout text, in painting order for multiple callouts. No separate longer spoken answer. Existing bubble text selection is preserved.
@@ -86,3 +86,47 @@ cursor, targeting or owner source was edited during conflict resolution. Test
 commands/results above belong to their respective pre-merge milestones; this
 resolution checks documentation and Git conflict state only. No commit created.
 The requested cursor/location integration review remains separate work.
+
+# Restored main-app pointer localization on test
+
+- Reviewed the merged runtime changes against test's pre-merge cursor adapter.
+  The main pointer worker already uses Ion's original drawing, movement and
+  monitor mapping; the missing part was the independent target-location pass.
+- Normal `python -m jarvis` now shares the earlier adapter's full-image locator:
+  maximum 1920-pixel JPEG, explicit 0..1000 boxes and normalized coordinates.
+  No crop-refinement pass or diagnostic window is enabled.
+- Only eligible pointer targets are replaced. Existing TTS, callouts, captions,
+  click dismissal, five-second pointer expiry, routing and GUIDE completion logic
+  remain unchanged. Locator failure retains the answer and omits guessed pointers.
+- Both requests remain cancellable under the existing overall deadline. The
+  extra location request adds API cost and latency per pointer step.
+- Verification: 137 tests passed on Windows outside the restricted sandbox,
+  including nine new locator/transport regression tests. The initial sandbox run
+  failed temporary-directory cleanup and native hotkey access. No paid API call
+  or live Canva accuracy assessment was performed.
+- Shared production files changed: `features/ai/openrouter.py` and
+  `features/targeting/grounding.py`. Added `features/ai/pointer_location.py` and
+  `tests/test_main_pointer_location.py`. Documentation changed: README, STATUS,
+  ARCHITECTURE and CURSOR_TARGETING. CursorMain/Ion remains untouched. No commit.
+- Manual check: exit the current Jarvis instance, run
+  `.\.venv\Scripts\python.exe -B -m jarvis`, hold Ctrl+Shift+Space over the target
+  application and request navigation. Verify the arrow tip identifies the named
+  control, click to continue, and check explanations still use callouts and speech.
+  Stop here for user review and manual commit.
+
+# New task replaces previous guide goal
+
+- Fixed old GUIDE context being attached to every non-explanation request.
+  Canva guidance now yields to a request such as “Arată-mi cum să deschid
+  internetul”; the previous step, loading counter and observer are reset.
+- Whole-utterance contextual follow-ups such as “Și acum?” retain the goal.
+  Unrecognized wording becomes a fresh request with retained conversation history.
+  Direct navigation commands such as “Deschide internetul” route to GUIDE.
+- Shared source changed in this part: `app.py`, `features/interaction/intent.py`
+  and the provider's history instructions in `features/ai/openrouter.py`.
+  Regression coverage added in `test_guide.py` and `test_visual_intent.py`.
+  README, ARCHITECTURE and STATUS updated. No owner/STT, targeting or movement
+  changes in this part. Branch remains `test`; no commit.
+- Verification: all 140 tests passed on Windows, including goal replacement,
+  fresh AUTO routing, follow-up classification, next-click context and stale
+  response rejection. Live speech/model interpretation remains a manual check.
