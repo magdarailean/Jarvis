@@ -116,14 +116,65 @@ class GuideTests(unittest.TestCase):
             self.c._guide_stop()
         self.c.pointer_bridge.show.assert_not_called()
 
-    def test_new_voice_request_cancels_entire_sequence(self):
+    def test_new_voice_request_pauses_sequence_and_cancels_old_response(self):
         request = self.start()
         self.c.interaction = Mock(active=False)
         self.c._push_to_talk()
-        self.assertFalse(self.c.guide.active)
+        self.assertTrue(self.c.guide.active)
+        self.assertFalse(self.c.guide.poll.isActive())
         self.c.provider.succeeded.emit(request.id, answer())
         self.c.pointer_bridge.show.assert_not_called()
         self.c.interaction.press.assert_called_once()
+
+    def test_voice_followup_keeps_guide_and_rejects_bubbles(self):
+        first = self.start()
+        self.c.provider.succeeded.emit(first.id, answer())
+        self.c.interaction = Mock(active=False)
+        self.c._push_to_talk()
+        self.c.session.set_frame(self.frame)
+        self.c._voice_prepared(self.c.session.begin('Și acum?'))
+        request = self.c.provider.sent[-1][0]
+        self.assertEqual(request.visual_intent, VisualIntent.GUIDE)
+        self.assertEqual(self.c.session.pending.visual_intent, VisualIntent.GUIDE)
+        self.assertEqual(request.guide_context['original_goal'], self.goal)
+        self.assertTrue(self.c.guide.poll.isActive())
+        payload = answer(actions=[dict(type='callout', id='bad', text='Do not show')])
+        self.c.provider.succeeded.emit(request.id, payload)
+        self.assertEqual(self.c.overlay.callouts, ())
+        self.assertTrue(self.c.guide.active)
+        self.c.session.set_frame(self.frame)
+        self.c._voice_prepared(self.c.session.begin('Explică-mi ce înseamnă acest buton.'))
+        request = self.c.provider.sent[-1][0]
+        self.assertEqual(request.visual_intent, VisualIntent.EXPLAIN)
+        self.assertFalse(self.c.guide.active)
+
+    def test_mixed_request_prioritizes_guide_in_real_controller(self):
+        self.goal = 'Arată-mi unde să apăs și explică-mi ce face butonul.'
+        request = self.start()
+        self.assertEqual(request.visual_intent, VisualIntent.GUIDE)
+        self.c.provider.succeeded.emit(request.id, answer())
+        self.c.pointer_bridge.show.assert_called_once()
+        self.assertEqual(self.c.overlay.callouts, ())
+
+    def test_canva_creation_is_pointer_only_and_continues_after_click(self):
+        self.goal = 'Ajuta-ma cum sa fac o prezentare in canva.'
+        first = self.start()
+        self.assertEqual(first.visual_intent, VisualIntent.GUIDE)
+        payload = build_payload(first, [], 'model')
+        types = payload['response_format']['json_schema']['schema']['properties']['actions']['items']['properties']['type']['enum']
+        self.assertEqual(types, ['pointer/cursor'])
+        self.c.provider.succeeded.emit(first.id, answer(text='Apasă Prezentare.'))
+        self.c.pointer_bridge.show.assert_called_once()
+        self.assertEqual(self.c.overlay.callouts, ())
+        self.c._guide_input()
+        self.c._guide_frame(self.frame)
+        second = self.c.provider.sent[-1][0]
+        self.assertEqual(second.guide_context['original_goal'], self.goal)
+        self.assertEqual(second.visual_intent, VisualIntent.GUIDE)
+        self.c.provider.succeeded.emit(second.id, answer(actions=[
+            dict(type='callout', id='wrong', text='Alege un șablon.')]))
+        self.assertEqual(self.c.overlay.callouts, ())
+        self.assertTrue(self.c.guide.active)
 
     def test_guide_schema_and_context_prohibit_mode_switch(self):
         request = self.start()

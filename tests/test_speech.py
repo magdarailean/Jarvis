@@ -152,6 +152,95 @@ class SpokenAnswerTests(unittest.TestCase):
         self.assertEqual(self.c.overlay.callouts, ())
         self.assertTrue(self.c.guide.active)
 
+    def test_guide_pointer_waits_for_speech_then_gets_five_seconds(self):
+        self.test_guide_speaks_without_switching_to_callout()
+        self.assertTrue(self.c._pointer_active)
+        self.assertFalse(self.c._pointer_expiry.isActive())
+        self.c.speech.busy = False
+        self.c.speech.finished.emit()
+        self.assertTrue(self.c._pointer_expiry.isActive())
+        self.assertEqual(self.c._pointer_expiry.interval(), 5000)
+        QTest.qWait(5100)
+        self.assertFalse(self.c._pointer_active)
+        self.assertTrue(self.c.guide.active)  # Expiry must not end the task.
+
+    def test_guide_click_and_new_voice_cancel_pointer_deadline(self):
+        self.test_guide_speaks_without_switching_to_callout()
+        self.c.speech.busy = False
+        self.c.speech.finished.emit()
+        self.c._guide_input()
+        self.assertFalse(self.c._pointer_active)
+        self.assertFalse(self.c._pointer_expiry.isActive())
+        self.c._guide_frame(self.frame)
+        request = self.c.provider.sent[-1][0]
+        self.c.provider.succeeded.emit(request.id, answer())
+        self.assertTrue(self.c._pointer_active)
+        self.assertFalse(self.c._pointer_expiry.isActive())
+        self.c.interaction = SimpleNamespace(active=False, press=Mock(), close=lambda: None)
+        self.c._push_to_talk()
+        self.assertFalse(self.c._pointer_active)
+        self.assertFalse(self.c.speech.busy)
+        self.c.speech.finished.emit()  # No timer for a removed pointer.
+        self.assertFalse(self.c._pointer_expiry.isActive())
+
+    def test_guide_speech_failure_releases_pointer(self):
+        self.test_guide_speaks_without_switching_to_callout()
+        self.c.speech.busy = False
+        self.c.speech.failed.emit('Eroare simulată')
+        self.assertTrue(self.c._pointer_expiry.isActive())
+        self.assertEqual(self.c._pointer_expiry.interval(), 5000)
+
+    def test_guide_transcript_stays_visible_through_status_and_five_second_grace(self):
+        self.test_guide_speaks_without_switching_to_callout()
+        caption = self.c._speech_caption
+        self.assertTrue(caption.isVisible())
+        self.assertEqual(caption.text(), self.c.speech.texts[-1])
+        self.c.speech.started.emit()
+        self.assertEqual(caption.text(), self.c.speech.texts[-1])
+        self.assertFalse(self.c._caption_expiry.isActive())
+        self.c.speech.busy = False
+        self.c.speech.finished.emit()
+        self.assertTrue(caption.isVisible())
+        self.assertEqual(self.c._caption_expiry.interval(), 5000)
+        QTest.qWait(5100)
+        self.assertFalse(caption.isVisible())
+        self.assertTrue(self.c.guide.active)
+
+    def test_new_voice_clears_guide_transcript_and_old_deadline(self):
+        self.test_guide_speaks_without_switching_to_callout()
+        self.c.speech.busy = False
+        self.c.speech.finished.emit()
+        self.c.interaction = SimpleNamespace(active=False, press=Mock(), close=lambda: None)
+        self.c._push_to_talk()
+        self.assertFalse(self.c._speech_caption.isVisible())
+        self.assertFalse(self.c._caption_expiry.isActive())
+
+    def test_click_clears_spoken_bubbles_even_outside_guide(self):
+        self.c.guide.buttons = lambda: False
+        self.explain()
+        self.assertFalse(self.c.guide.active)
+        self.assertTrue(self.c.overlay.callouts)
+        self.c.guide.buttons = lambda: True
+        self.c._sample_visual_click()
+        self.assertEqual(self.c.overlay.callouts, ())
+        self.assertFalse(self.c.speech.busy)
+        self.assertFalse(self.c._visual_click_poll.isActive())
+        self.assertEqual(self.c._speech_callouts, [])
+        self.assertFalse(self.c.guide.settle.isActive())
+        self.c.speech.finished.emit()
+        self.assertEqual(self.c.overlay.callouts, ())
+
+    def test_guide_mouse_observer_clears_caption_immediately(self):
+        self.test_guide_speaks_without_switching_to_callout()
+        self.c.guide.buttons = lambda: True
+        self.c.guide.sample()
+        self.assertFalse(self.c._speech_caption.isVisible())
+        self.assertFalse(self.c._pointer_active)
+        self.assertFalse(self.c.speech.busy)
+        self.c.guide.buttons = lambda: False
+        self.c.guide.sample()
+        self.assertTrue(self.c.guide.settle.isActive())
+
     def test_process_cancellation_rejects_late_events_and_next_speech_finishes(self):
         service = SpeechService()
         finished, errors = [], []

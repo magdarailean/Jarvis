@@ -2,7 +2,6 @@
 
 import sys
 import os
-from dataclasses import replace
 
 from PySide6.QtCore import QLocale, QObject, Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QColor, QPalette
@@ -48,6 +47,10 @@ class DesktopController(QObject):
         self.overlay: OverlayWindow | None = None
         self.session = Session()
         self.speech = speech_factory(self)
+        self._speech_caption = None
+        self._caption_expiry = QTimer(self)
+        self._caption_expiry.setSingleShot(True)
+        self._caption_expiry.timeout.connect(self._clear_speech_caption)
         self._speech_callouts = []
         self._speech_enabled = False
         self.speech.preparing.connect(lambda: self._speech_state("Pregătesc vocea..."))
@@ -55,12 +58,20 @@ class DesktopController(QObject):
         self.speech.finished.connect(self._speech_finished)
         self.speech.failed.connect(self._speech_failed)
         self.guide = GuideSession(self)
+        self._visual_click_held = False
+        self._visual_click_poll = QTimer(self)
+        self._visual_click_poll.setInterval(20)
+        self._visual_click_poll.timeout.connect(self._sample_visual_click)
         self.guide_capture = CaptureSession(self)
         self.guide.changed.connect(self._guide_input)
         self.guide.inspect.connect(self._guide_capture)
         self.guide_capture.frame_changed.connect(self._guide_frame)
         self.guide_capture.failed.connect(lambda _: self._guide_stop("Captura a eșuat. Repetă cererea vocală."))
         self.pointer_bridge = PointerBridge(self)
+        self._pointer_active = False
+        self._pointer_expiry = QTimer(self)
+        self._pointer_expiry.setSingleShot(True)
+        self._pointer_expiry.timeout.connect(self._hide_pointer)
         self.pointer_requested.connect(self._show_pointer)
         self.pointer_bridge.failed.connect(self._pointer_failed)
         self.pointer_bridge.shown.connect(lambda: self.log.write("visual.pointer = shown"))
@@ -187,9 +198,14 @@ class DesktopController(QObject):
         if self._closed or self.interaction.active or self.capture.pending:
             return
         self._release_speech_callouts()
+        self._clear_speech_caption()
         self.speech.stop()
         self.log.write("Speech stopped for push-to-talk.")
-        self._guide_stop()
+        # Suspend observation during recording, retaining the active goal.
+        self.guide.poll.stop()
+        self.guide.settle.stop()
+        self.guide_capture.clear(notify_finished=False)
+        self._hide_pointer()
         if self.overlay is not None:
             self.overlay.clear_temporary_callouts()
         self._cancel_ai()
@@ -202,7 +218,7 @@ class DesktopController(QObject):
         self.interaction.press(self._voice_screen, annotations)
 
     def _hide_for_voice_capture(self):
-        self.pointer_bridge.hide()
+        self._hide_pointer()
         self._voice_capture_hidden = True
         self._voice_overlay_visible = self.overlay is not None and self.overlay.isVisible()
         if self.window is not None:
@@ -252,15 +268,37 @@ class DesktopController(QObject):
     def _guide_stop(self, notice=None):
         self.guide.stop()
         self.guide_capture.clear(notify_finished=False)
-        self.pointer_bridge.hide()
+        self._hide_pointer()
         if notice:
             self._ai_status(notice)
 
+    def _watch_visual_clicks(self):
+        self._visual_click_held = self.guide.buttons()
+        self._visual_click_poll.start()
+
+    def _sample_visual_click(self):
+        temporary = self.overlay is not None and any(c.temporary for c in self.overlay.callouts)
+        caption = self._speech_caption is not None and self._speech_caption.isVisible()
+        if not temporary and not caption:
+            self._visual_click_poll.stop()
+            return
+        held = self.guide.buttons()
+        if held and not self._visual_click_held and not self.guide.active:
+            self._guide_input()  # Dismiss only; no automatic capture outside GUIDE.
+        self._visual_click_held = held
+
     def _guide_input(self):
         # Any click invalidates an in-flight prediction, even outside the target.
-        self.pointer_bridge.hide()
+        self._visual_click_poll.stop()
+        self._release_speech_callouts()
+        if self.overlay is not None:
+            self.overlay.clear_temporary_callouts()
+        self._clear_speech_caption()
+        self.speech.stop()
+        self._hide_pointer()
         self._cancel_ai()
         self.guide_capture.clear(notify_finished=False)
+        self._ai_status("Verific următorul pas..." if self.guide.active else "Gata")
 
     def _guide_capture(self):
         if not self.guide.active or self._closed:
@@ -304,7 +342,7 @@ class DesktopController(QObject):
             return False
         # Keep the goal while awaiting a user correction; do not spend requests
         # indefinitely on loading screens or invent an unsafe next target.
-        self.pointer_bridge.hide()
+        self._hide_pointer()
         self.guide.settle.stop()
         self._ai_status("Ghidare în așteptare · " + (plan.text[:240] or "Corectează ecranul sau repetă cererea vocală."))
         return False
@@ -320,13 +358,32 @@ class DesktopController(QObject):
         for timing, identifier, token in held:
             timing.release(identifier, token, delay=5.0)
 
+    def _clear_speech_caption(self):
+        self._caption_expiry.stop()
+        if self._speech_caption is not None:
+            self._speech_caption.hide()
+
     def _speak_answer(self, text, callouts=()):
         if self._speech_enabled and not self._closed:
             self._release_speech_callouts()
+            self._clear_speech_caption()
+            if not callouts:
+                # GUIDE's transcript is separate from AI annotations and status.
+                # Status changes must never replace the words being spoken.
+                if self._speech_caption is None:
+                    self._speech_caption = StatusIndicator()
+                    self._speech_caption.setObjectName("JarvisSpeechCaption")
+                    self._speech_caption.setMaximumWidth(640)
+                screen = foreground_screen(self.app)
+                self._speech_caption.display(text, screen)
+                # Leave room for the independent status indicator below.
+                self._speech_caption.move(self._speech_caption.x(),
+                    max(screen.availableGeometry().top(), self._speech_caption.y()-110))
             for item in callouts:
                 if item.temporary:
                     timing = self.overlay.callout_timing
                     self._speech_callouts.append((timing, item.id, timing.hold(item.id)))
+            self._watch_visual_clicks()
             self.speech.say(text)
 
     def _speech_state(self, status):
@@ -336,6 +393,11 @@ class DesktopController(QObject):
 
     def _speech_finished(self):
         self._release_speech_callouts()
+        if self._pointer_active and not self._pointer_expiry.isActive():
+            self._pointer_expiry.start(5000)
+        if (self._speech_caption is not None and self._speech_caption.isVisible()
+                and not self._caption_expiry.isActive()):
+            self._caption_expiry.start(5000)
         self.log.write("Speech playback finished.")
         if not self._closed and not self._ai_pending and not (self.interaction and self.interaction.active):
             self._ai_status("Gata")
@@ -349,9 +411,24 @@ class DesktopController(QObject):
             if self.indicator is not None:
                 self.indicator.display(message, foreground_screen(self.app))
 
+    def _hide_pointer(self):
+        self._pointer_expiry.stop()
+        self._pointer_active = False
+        self.pointer_bridge.hide()
+
+    def _close_pointer(self):
+        self._pointer_expiry.stop()
+        self._pointer_active = False
+        self.pointer_bridge.close()
+
     def _show_pointer(self, action):
         if self.overlay is not None:
+            self._pointer_expiry.stop()
+            self._pointer_active = True
             self.pointer_bridge.show(action, self.overlay.screen())
+            # Missing/failed speech must not leave a pointer indefinitely.
+            if self._pointer_active and not self.speech.busy:
+                self._pointer_expiry.start(5000)
 
     def _pointer_failed(self, message):
         if self.guide.active:
@@ -368,18 +445,25 @@ class DesktopController(QObject):
 
     def _submit_ai(self, request):
         self._release_speech_callouts()
+        self._clear_speech_caption()
         self.speech.stop()
         if request.guide_context is None and self.guide.active:
-            self._guide_stop()
+            if request.visual_intent == VisualIntent.EXPLAIN:
+                self._guide_stop()
+            elif request.frame is not None:
+                request = self.session.set_guide_context(request.id, self.guide.context(request.frame))
         if request.visual_intent == VisualIntent.GUIDE and not self.guide.active and request.frame is not None:
             self.guide.start(request.question)
             if self.overlay is not None:
                 self.overlay.clear_temporary_callouts()
-            request = replace(request, guide_context=self.guide.context(request.frame))
+            request = self.session.set_guide_context(request.id, self.guide.context(request.frame))
+        if self.guide.active:
+            self.guide.held = self.guide.buttons()
+            self.guide.poll.start()
         self._ai_pending = request.id
         self.log.write(f"visual.intent = {request.visual_intent.value}")
         if request.visual_intent == VisualIntent.EXPLAIN:
-            self.pointer_bridge.hide()
+            self._hide_pointer()
         visuals = []
         if self.overlay is not None:
             for item in self.overlay.callouts:
@@ -482,7 +566,7 @@ class DesktopController(QObject):
             if not self._guide_result(payload, plan):
                 return True
         if request.visual_intent == VisualIntent.EXPLAIN:
-            self.pointer_bridge.hide()
+            self._hide_pointer()
         if self.overlay is not None and (self.guide.active or request.visual_intent != VisualIntent.AUTO):
             self.overlay.clear_temporary_callouts()
         if request.frame is None or not any(action.kind.value != "none" for action in plan.actions):
@@ -503,8 +587,9 @@ class DesktopController(QObject):
                 self.clear_overlay()
                 self.overlay = OverlayWindow(screen)
                 self.overlay.pointer_requested.connect(self.pointer_requested.emit)
-                self.overlay.pointer_cleared.connect(self.pointer_bridge.close)
+                self.overlay.pointer_cleared.connect(self._close_pointer)
             self.overlay.apply_visual_plan(plan)
+            self._watch_visual_clicks()
             callout_ids = {a.id for a in plan.actions if a.kind.value == "callout"}
             displayed = [item for item, _ in self.overlay.displayed_callouts()
                          if item.id in callout_ids]
@@ -569,6 +654,7 @@ class DesktopController(QObject):
         if self._closed:
             return
         self._release_speech_callouts()
+        self._clear_speech_caption()
         self.speech.stop()
         self._guide_stop()
         self._cancel_ai()
@@ -599,7 +685,7 @@ class DesktopController(QObject):
             self._capture_failed(type(error).__name__)
             return
         self.window.capture_button.setEnabled(False)
-        self.pointer_bridge.hide()
+        self._hide_pointer()
         self._set_capture_status("Captură în 3 secunde...")
         self._overlay_was_visible = self.overlay is not None and self.overlay.isVisible()
         self._capture_hidden = True
@@ -652,7 +738,7 @@ class DesktopController(QObject):
         try:
             self.overlay = OverlayWindow(self.window.screen())
             self.overlay.pointer_requested.connect(self.pointer_requested.emit)
-            self.overlay.pointer_cleared.connect(self.pointer_bridge.close)
+            self.overlay.pointer_cleared.connect(self._close_pointer)
             for annotation in demo_annotations():
                 self.overlay.upsert(annotation)
             self.window.overlay_feedback.setText(
@@ -668,7 +754,7 @@ class DesktopController(QObject):
 
     @Slot()
     def clear_overlay(self) -> None:
-        self.pointer_bridge.close()
+        self._close_pointer()
         if self.overlay is not None:
             self.overlay.close()
             self.overlay.deleteLater()
@@ -709,6 +795,10 @@ class DesktopController(QObject):
             return
         self._guide_stop()
         self._closed = True
+        self._clear_speech_caption()
+        if self._speech_caption is not None:
+            self._speech_caption.close()
+        self._visual_click_poll.stop()
         self.speech.close()
         self._cancel_ai()
         if self.hotkey is not None:

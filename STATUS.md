@@ -1,8 +1,19 @@
 # Current Milestone
 
-Romanian spoken responses in the normal runtime on branch TTS. Existing user changes preserved; no commit created.
+Immediate click dismissal of temporary visual assistance in the real runtime. Existing pointer guidance and EXPLAIN callout behavior preserved. Existing TTS/callout behavior preserved; no commit created.
 
 # Working
+
+- Left/right click clears temporary callouts and their leaders, speech caption and pointer, stops speech, and cancels outstanding visual holds. This also works outside GUIDE, without starting automatic screen capture. GUIDE still captures after release/settling for the next step. Persistent annotations are preserved.
+
+- GUIDE now displays the exact spoken text in a separate caption. Status updates do not overwrite it. It remains through speech plus five seconds, then hides; click/next-step/PTT clears it immediately. Cursor guidance remains independent.
+
+- “Ajuta-ma cum sa fac o prezentare in canva” now routes to GUIDE instead of AUTO. Creation requests for editable artifacts share this routing; homework/recipe requests are not classified by the generic verb “fac” alone. AI chooses target geometry from the actual screen.
+
+- GUIDE pointer is held during TTS, then hidden after five seconds. Click/PTT clears it immediately and cancels the old timer. Expiry preserves the active goal and click observer. Speech failure also releases the pointer after five seconds.
+- Navigation variants such as “Cum pot închide site-ul?” and “Cum să-l închid?” route to GUIDE. Provider instructions prioritize the spoken task over unrelated screenshot content.
+
+- Explicit arată-mi/arata-mi/unde wins over explanation terms. Active GUIDE survives PTT follow-ups unless the user explicitly requests an explanation. The dispatched request and pending response-validation request share the same GUIDE context.
 
 - Online edge-tts Romanian Alina synthesis and in-memory audio playback through a cancellable isolated worker.
 - TTS reads exactly the final rendered callout text, in painting order for multiple callouts. No separate longer spoken answer. Existing bubble text selection is preserved.
@@ -28,19 +39,20 @@ Romanian spoken responses in the normal runtime on branch TTS. Existing user cha
 
 # How I Tested This Milestone
 
-- 91 tests pass, including rendered text/order, callout capacity, no-callout AUTO responses, speech failure, PTT cancellation, stale subprocess events, GUIDE routing and speech-held lifetime and five-second completion/failure grace period.
-- Live runtime check passed using the actual controller, STT readiness, OpenRouter with a generated equation image, production overlay and Romanian playback: bubble retained after speech, then removed at its new deadline. The observed total reading lifetime exceeded 32 seconds, confirming the old 15-second deadline no longer removes a spoken bubble.
-- No private microphone recording or desktop upload during this automated live check. Full human voice flow remains manual.
+- 101 tests passed (including an actual five-second Qt timer expiry): click dismissal outside GUIDE, real GUIDE mouse-sampling callback cleanup and next-step settling, GUIDE caption text equality, survival through speaking/ready status, real five-second caption expiry and PTT cleanup, exact Canva phrase, pointer-only provider schema, controller delivery, rejected bubble response and preserved creation goal after a click, pointer speech lifetime, click/PTT timer cancellation, next-step replacement, speech failure, mixed keyword priority, GUIDE schema restriction, actual controller voice-follow-up routing, rejection of AI callouts in GUIDE, click invalidation/capture, multi-step progression and completion evidence, plus TTS and overlay regressions.
+- No CursorMain or Ion files changed. Pointer positioning/implementation remains unchanged; accuracy still depends on AI identifying the correct visible target.
+- Live Canva/microphone acceptance remains manual; automated checks use the real controller/provider payload path with simulated AI responses.
+- Previous native startup check encountered hotkey registration failure under sandbox; unrestricted startup exited through the single-instance gate. No claim of a new live microphone/AI acceptance run. Restart the existing Jarvis instance for manual validation.
 
 # How You Can Test It
 
+Exit existing Jarvis through its tray, then run:
+
 ```powershell
-cd C:\Users\Magda\Documents\GitHub\Jarvis
-.\.venv\Scripts\python.exe -m pip install -e ".[voice,openrouter]"
 .\.venv\Scripts\python.exe -m jarvis
 ```
 
-Wait for Gata. Hold Ctrl+Shift+Space and ask for a short explanation of visible content; release. Compare speech with bubble text, observe typewriter and expiry five seconds after speech finishes. Interrupt a longer answer with PTT, then ask another question. Ask where to open something and verify existing cursor guidance. Speech failure must leave text/visuals intact; automated tests simulate this failure.
+Hold Ctrl+Shift+Space and say “Ajuta-ma cum sa fac o prezentare in canva” while Canva is visible. Release: expect cursor guidance, no bubble. Click the indicated control; expect the old pointer to disappear and a fresh-screen next step. Try “Și acum?” through PTT: GUIDE should persist. Try the mixed request “Arată-mi butonul și explică-mi ce face”: GUIDE wins. “Explică-mi acest buton” explicitly exits GUIDE. Click while a bubble is visible or being read: it and its leader must disappear immediately and speech must stop. Repeat outside GUIDE; no automatic next request should occur. Wait through the guidance speech: its complete text must be visible in a separate caption, alongside cursor guidance. Caption and pointer remain through speech and disappear five seconds later. Click before or after expiry to continue; the next pointer gets its own lifetime. New PTT must hide it immediately. Continue until the requested task is visibly complete.
 
 # Required Configuration
 

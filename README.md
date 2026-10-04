@@ -102,3 +102,17 @@ Manual check: run normal Jarvis, ask about a visible item, observe the fast prog
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p test_callout_timing.py -v
 ```
+
+## GUIDE routing priority
+
+Explicit `arată-mi` / `arata-mi` / `unde` requests take priority over explanation terms in the same request. GUIDE restricts AI output and local validation to pointer actions. Clicks hide the previous pointer; after the UI settles Jarvis captures a fresh screen and asks for the next action until visible completion evidence is returned. A click alone is not treated as success.
+
+PTT pauses the guide observer while listening and retains the original goal. Follow-ups such as “Și acum?” continue GUIDE. An explicit explanation-only request such as “Explică-mi acest buton” switches to EXPLAIN. Restart Jarvis after updating the checkout; an already-running process keeps its old code.
+
+GUIDE pointers now stay visible during guidance speech and disappear five seconds after speech finishes or fails. Pointer expiry does not end the task: a subsequent click still triggers fresh-screen analysis. A click or new PTT immediately hides the old pointer and cancels its expiry timer. Next-step pointers receive a fresh speech lifetime. CursorMain and positioning are unchanged.
+
+Creation requests such as “Ajută-mă cum să fac o prezentare în Canva” now enter GUIDE directly. Presentation/document/table creation uses pointer-only guidance and the existing multi-step observer; the AI still identifies the next target from the current screenshot. Explicit explanation-only requests retain EXPLAIN. No Canva-specific coordinates or automated clicks are introduced.
+
+GUIDE speech also has a separate on-screen transcript. It displays exactly the spoken instruction, remains while speech plays and for five seconds afterward, and is not replaced by the status indicator. It is cleared on new PTT or the next step. This caption accompanies cursor guidance; it does not switch the AI to EXPLAIN or change pointer targeting.
+
+Click dismissal: a left/right mouse press clears temporary callout bubbles (including their leaders), GUIDE captions and pointers, and stops old speech. Outside GUIDE this only dismisses assistance; it does not capture or send a new screen. During GUIDE, the existing settled-click flow continues to the next step. Unrelated persistent annotations are retained.

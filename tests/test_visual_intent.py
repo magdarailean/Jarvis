@@ -39,14 +39,18 @@ class IntentTests(unittest.TestCase):
                 'Explicami cum calculez asta', 'Cum rezolvăm problema?',
                 'Explică de ce accelerația depinde de forță.',
                 'Verifică unitățile din problema de fizică.',
-                'Clarifică ce înseamnă inerție.',
-                'Arată-mi butonul și explică-mi ce face.'],
-            VisualIntent.GUIDE: [B, 'Arata-mi cum sa deschid un fisier Word.', 'arată', 'unde',
+                'Clarifică ce înseamnă inerție.'],
+            VisualIntent.GUIDE: ['Ajuta-ma cum sa fac o prezentare in canva.',
+                'Ajută-mă să creez un document în Word.', 'Cum fac un tabel în Excel?',
+                'Vreau să creez o prezentare.', 'Cum pot închide site-ul?', 'Cum pot eu să închid pagina?',
+                'Cum să-l închid?', 'Cum găsesc butonul de închidere?', 'Arată-mi butonul și explică-mi ce face.',
+                'Arată-mi unde să apăs', 'arata-mi unde sa apas',
+                'Explică unde să apăs', B, 'Arata-mi cum sa deschid un fisier Word.', 'arată', 'unde',
                 'Te rog arata-mi cum sa inchid browserul.',
                 'unde găsesc', 'unde să apăs', 'cum deschid', 'cum intru', 'cum selectez',
                 'cum apăs', 'cum sa salvez', 'Cum pot să deschid un fișier Word?',
                 'Cum aș putea deschide meniul?', 'Îmi arăți unde găsesc fișierul?'],
-            VisualIntent.AUTO: ['cum', 'Cum funcționează asta?', 'Ajută-mă.', 'aratator', ''],
+            VisualIntent.AUTO: ['Cum fac problema aceasta?', 'Cum fac o omletă?', 'cum', 'Cum funcționează asta?', 'Ajută-mă.', 'aratator', ''],
         }
         for expected, phrases in cases.items():
             for phrase in phrases:
