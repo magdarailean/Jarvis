@@ -1,12 +1,17 @@
 """Qt overlay adapter. Call its public methods on the GUI thread only."""
 
 import math
+from dataclasses import replace
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QScreen
 from PySide6.QtWidgets import QApplication, QWidget
 
 from .model import Annotation, AnnotationScene, Shape
+from jarvis.features.callouts.model import CalloutScene, VisualKind
+from jarvis.features.callouts.layout import arrange
+from jarvis.features.callouts.window import paint_callout
+from jarvis.features.callouts.timing import CalloutTiming
 
 
 class OverlayWindow(QWidget):
@@ -17,12 +22,19 @@ class OverlayWindow(QWidget):
     does not track underlying application content or scrolling yet.
     """
 
+    pointer_requested = Signal(object)  # Validated VisualAction; no cursor implementation here.
+    pointer_cleared = Signal()
+
     def __init__(self, screen: QScreen) -> None:
         super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint
                          | Qt.WindowType.WindowTransparentForInput
                          | Qt.WindowType.WindowDoesNotAcceptFocus)
         self._scene = AnnotationScene()
+        self._callouts = CalloutScene()
+        self.callout_timing = CalloutTiming(self)
+        self.callout_timing.changed.connect(self.update)
+        self.callout_timing.expired.connect(self._remove_callout)
         self._target_screen = screen
         self.setObjectName("JarvisOverlay")
         self.setWindowTitle("Jarvis — Adnotări")
@@ -40,31 +52,83 @@ class OverlayWindow(QWidget):
     def annotations(self) -> tuple[Annotation, ...]:
         return self._scene.annotations
 
+    @property
+    def callouts(self):
+        return self._callouts.items
+
+    @property
+    def has_visuals(self):
+        return any(item.visible for item in (*self.annotations, *self.callouts))
+
+    def apply_visual_plan(self, plan):
+        for action in plan.actions:
+            try:
+                if action.kind == VisualKind.CALLOUT:
+                    if self._target_screen is None:
+                        continue
+                    self._callouts.upsert(action.callout)
+                    self.callout_timing.start(action.callout)
+                    self._scene.remove(action.id)
+                elif action.kind == VisualKind.POINTER:
+                    self.pointer_requested.emit(action)
+                elif action.kind != VisualKind.NONE:
+                    self.upsert(action.annotation)
+            except (ValueError, TypeError, RuntimeError):
+                continue  # One invalid/unrenderable action never discards siblings or answer.
+        self._refresh()
+        return plan.text
+
     def upsert(self, annotation: Annotation) -> None:
         if self._target_screen is None:
             raise RuntimeError("Overlay target screen was removed; create a new overlay")
         self._scene.upsert(annotation)
+        self._callouts.remove(annotation.id)
+        self.callout_timing.remove(annotation.id)
         self._refresh()
 
     def set_visible(self, annotation_id: str, visible: bool) -> None:
-        self._scene.set_visible(annotation_id, visible)
+        item = next((item for item in self.callouts if item.id == annotation_id), None)
+        if item is not None:
+            self._callouts.upsert(replace(item, visible=visible))
+        else:
+            self._scene.set_visible(annotation_id, visible)
         self._refresh()
 
     def highlight(self, annotation_id: str, enabled: bool = True) -> None:
-        self._scene.highlight(annotation_id, enabled)
+        if any(item.id == annotation_id for item in self.callouts):
+            self._callouts.highlight(annotation_id, enabled)
+        else:
+            self._scene.highlight(annotation_id, enabled)
         self._refresh()
 
     def remove(self, annotation_id: str) -> None:
         self._scene.remove(annotation_id)
+        self._callouts.remove(annotation_id)
+        self.callout_timing.remove(annotation_id)
         self._refresh()
 
+    def _remove_callout(self, identifier):
+        self._callouts.remove(identifier)
+        self.callout_timing.remove(identifier)
+        if not self.has_visuals:
+            self.hide()
+        self.update()  # Expiry must not re-show an overlay hidden for capture.
+
+    def clear_temporary_callouts(self):
+        for item in self.callouts:
+            if item.temporary:
+                self._remove_callout(item.id)
+
     def clear(self) -> None:
+        self.pointer_cleared.emit()
         self._scene.clear()
+        self._callouts.clear()
+        self.callout_timing.clear()
         self.hide()
         self.update()
 
     def _refresh(self) -> None:
-        self.setVisible(any(item.visible for item in self.annotations))
+        self.setVisible(self.has_visuals)
         self.update()
 
     def _display_changed(self, *_args) -> None:
@@ -87,6 +151,13 @@ class OverlayWindow(QWidget):
         for item in self.annotations:
             if item.visible:
                 self._paint_annotation(painter, item)
+        occupied = []
+        for item in self.callouts:
+            if item.visible:
+                layout = arrange(item, self.width(), self.height(), occupied)
+                if layout is not None:
+                    paint_callout(painter, item, layout, self.callout_timing.count(item.id))
+                    occupied.append(layout.bubble)
         painter.end()
 
     def _paint_annotation(self, painter: QPainter, item: Annotation) -> None:

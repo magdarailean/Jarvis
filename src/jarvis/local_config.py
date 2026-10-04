@@ -30,4 +30,8 @@ def load_local_config(path=None, environ=None):
 def speech_model(variable, default):
     configured = os.environ.get(variable, "").strip()
     local = ROOT / "models" / "stt" / default
+    if not configured and variable == "JARVIS_ION_MODEL" and not (local / "model.bin").is_file():
+        smaller = ROOT / "models" / "stt" / "small"
+        if (smaller / "model.bin").is_file():
+            return str(smaller)
     return configured or (str(local) if (local / "model.bin").is_file() else default)

@@ -3,7 +3,7 @@
 import sys
 import os
 
-from PySide6.QtCore import QLocale, QObject, Qt, Signal, Slot
+from PySide6.QtCore import QLocale, QObject, Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -19,14 +19,20 @@ from jarvis.features.hotkey.windows import GlobalHotkey
 from jarvis.features.voice_input.ion_adapter import IonAdapter
 from jarvis.features.interaction.controller import InteractionController
 from jarvis.features.interaction.desktop import StatusIndicator, foreground_screen
+from jarvis.features.callouts.model import VisualPlan
+from jarvis.features.ai.openrouter import OpenRouterProvider
+from jarvis.infrastructure.pointer_bridge import PointerBridge
 
 
 class DesktopController(QObject):
     activation_requested = Signal()
+    pointer_requested = Signal(object)  # Cursor teammate's consumer boundary.
+    answer_ready = Signal(str)  # Text survives visual failures; future TTS consumer.
 
     def __init__(self, app: QApplication, *, instance_key: str | None = None,
                  tray_factory=TrayIcon, log: AppLog | None = None, enable_voice=False,
-                 background=False, voice_factory=IonAdapter, hotkey_factory=GlobalHotkey) -> None:
+                 background=False, voice_factory=IonAdapter, hotkey_factory=GlobalHotkey,
+                 provider_factory=OpenRouterProvider) -> None:
         super().__init__()
         self.app = app
         self.instance_key = instance_key
@@ -37,6 +43,20 @@ class DesktopController(QObject):
         self.instance: SingleInstance | None = None
         self.overlay: OverlayWindow | None = None
         self.session = Session()
+        self.pointer_bridge = PointerBridge(self)
+        self.pointer_requested.connect(self._show_pointer)
+        self.pointer_bridge.failed.connect(self._pointer_failed)
+        self.provider = provider_factory(self)
+        self.provider.succeeded.connect(self._ai_complete)
+        self.provider.failed.connect(self._ai_failed)
+        self._ai_pending = None
+        self._ai_tick = 0
+        self._ai_progress = QTimer(self)
+        self._ai_progress.setInterval(400)
+        self._ai_progress.timeout.connect(self._animate_ai)
+        self._ai_deadline = QTimer(self)
+        self._ai_deadline.setSingleShot(True)
+        self._ai_deadline.timeout.connect(self._ai_timeout)
         self.capture = CaptureSession(self)
         self.capture.frame_changed.connect(self._capture_changed)
         self.capture.finished.connect(self._capture_finished)
@@ -120,7 +140,7 @@ class DesktopController(QObject):
             self.hotkey = self.hotkey_factory(self.app, os.environ.get("JARVIS_HOTKEY", "Ctrl+Shift+Space"))
             self.window.activation_hint.setText(
                 f"Ține apăsat {os.environ.get('JARVIS_HOTKEY', 'Ctrl+Shift+Space')} în aplicația ta, "
-                "vorbește și eliberează. Jarvis pregătește contextul în fundal. AI nu este conectat încă."
+                "vorbește și eliberează. Întrebarea și captura sunt trimise către OpenRouter."
             )
             self.hotkey.pressed.connect(self._push_to_talk)
             self.hotkey.released.connect(self.interaction.release)
@@ -139,6 +159,9 @@ class DesktopController(QObject):
     def _push_to_talk(self):
         if self._closed or self.interaction.active or self.capture.pending:
             return
+        if self.overlay is not None:
+            self.overlay.clear_temporary_callouts()
+        self._cancel_ai()
         if self.capture.frame is not None:
             self.capture.clear()
         self._voice_screen = foreground_screen(self.app)
@@ -148,6 +171,7 @@ class DesktopController(QObject):
         self.interaction.press(self._voice_screen, annotations)
 
     def _hide_for_voice_capture(self):
+        self.pointer_bridge.hide()
         self._voice_capture_hidden = True
         self._voice_overlay_visible = self.overlay is not None and self.overlay.isVisible()
         self.window.hide()
@@ -159,7 +183,7 @@ class DesktopController(QObject):
         if self._voice_capture_hidden:
             self._voice_capture_hidden = False
             if (not self._closed and self._voice_overlay_visible and self.overlay is not None
-                    and any(a.visible for a in self.overlay.annotations)):
+                    and self.overlay.has_visuals):
                 self.overlay.show()
             if not self._closed:
                 self.indicator.display(self._voice_status, foreground_screen(self.app))
@@ -188,13 +212,140 @@ class DesktopController(QObject):
     def _voice_prepared(self, request):
         self.window.session_panel.render(self.session)
         self.window.show_capture(request.frame)
-        self.log.write("Interaction context prepared; AI boundary reached; no AI request sent.")
+        self._submit_ai(request)
+
+    def _ai_status(self, text):
+        if self.indicator is not None:
+            self._voice_state(text, False)
+        else:
+            self._set_capture_status(text)
+
+    def _show_pointer(self, action):
+        if self.overlay is not None:
+            self.pointer_bridge.show(action, self.overlay.screen())
+
+    def _pointer_failed(self, message):
+        self.log.write("Pointer adapter unavailable; answer retained.")
+        if self.window is not None:
+            self.window.session_panel.feedback.setText(message)
+        if self.indicator is not None:
+            self.indicator.display(message, foreground_screen(self.app))
+
+    def _animate_ai(self):
+        self._ai_tick += 1
+        self._ai_status("Pregătesc explicația" + "." * (1 + self._ai_tick % 3))
+
+    def _submit_ai(self, request):
+        self._ai_pending = request.id
+        visuals = []
+        if self.overlay is not None:
+            for item in self.overlay.callouts:
+                visuals.append(dict(type="callout", id=item.id, text=item.text, target=item.target))
+            for item in self.overlay.annotations:
+                visuals.append(dict(type=item.shape.value, id=item.id, target=item.bounds, text=item.text))
+        self._ai_progress.start()
+        self._ai_deadline.start(60000)
+        self._animate_ai()
+        self.log.write(f"AI request dispatched; request={request.id}; screenshot={request.frame is not None}.")
+        try:
+            self.provider.send(request, visuals)
+        except (ValueError, RuntimeError, OSError):
+            self._ai_failed(request.id, "Cererea AI nu a putut fi trimisă. Verifică configurarea OpenRouter.")
+
+    def _stop_ai_timers(self):
+        self._ai_progress.stop()
+        self._ai_deadline.stop()
+        self._ai_pending = None
+
+    def _cancel_ai(self):
+        identifier = self._ai_pending
+        self._stop_ai_timers()
+        self.provider.cancel()
+        if identifier:
+            self.session.fail(identifier, "Cererea AI a fost anulată.")
+
+    def _ai_timeout(self):
+        identifier = self._ai_pending
+        self.provider.cancel()
+        if identifier:
+            self._ai_failed(identifier, "OpenRouter a depășit timpul de așteptare. Încearcă din nou.")
+
+    @Slot(str, str)
+    def _ai_failed(self, identifier, message):
+        if self._closed or identifier != self._ai_pending:
+            return
+        self._stop_ai_timers()
+        if self.session.fail(identifier, message):
+            if self.window is not None:
+                self.window.session_panel.render(self.session)
+                self.window.session_panel.feedback.setText(message)
+            self._ai_status("Eroare")
+            if self.indicator is not None:
+                self.indicator.display(message, foreground_screen(self.app))
+        self.log.write(f"AI request failed; request={identifier}.")
+
+    @Slot(str, object)
+    def _ai_complete(self, identifier, payload):
+        if self._closed or identifier != self._ai_pending:
+            return
+        self._stop_ai_timers()
+        accepted = self.accept_ai_response(identifier, payload)
+        if not accepted:
+            self.session.fail(identifier, "Răspunsul AI nu a putut fi acceptat.")
+            if self.window is not None:
+                self.window.session_panel.render(self.session)
+        self._ai_status("Gata" if accepted else "Eroare")
+        self.log.write(f"AI response received; request={identifier}; accepted={accepted}.")
+
+    @Slot(str, object)
+    def accept_ai_response(self, request_id, payload):
+        """GUI-thread completion boundary for the live provider transport.
+
+        The request's captured monitor determines placement. No demo targets,
+        screenshot inference, provider call, or cursor implementation lives here.
+        """
+        request = self.session.pending
+        if self._closed or request is None or request.id != request_id:
+            return False
+        plan = VisualPlan.parse(payload)
+        try:
+            if not self.session.complete(request_id, plan.text):
+                return False
+        except ValueError:
+            return False
+        if self.window is not None:
+            self.window.session_panel.render(self.session)
+        self.answer_ready.emit(plan.text)
+        self._set_capture_status("Gata")
+        if request.frame is None or not any(action.kind.value != "none" for action in plan.actions):
+            return True
+        geometry = request.frame.geometry
+        screen = next((screen for screen in self.app.screens()
+                       if screen.name() == geometry.monitor_name
+                       and screen.geometry().getRect() == (geometry.left, geometry.top,
+                           geometry.logical_width, geometry.logical_height)
+                       and abs(screen.devicePixelRatio()-geometry.device_pixel_ratio) < .001), None)
+        if screen is None:
+            self.log.write("Visual plan skipped; captured display no longer matches.")
+            return True
+        try:
+            if self.overlay is None or self.overlay.screen() is not screen:
+                self.clear_overlay()
+                self.overlay = OverlayWindow(screen)
+                self.overlay.pointer_requested.connect(self.pointer_requested.emit)
+                self.overlay.pointer_cleared.connect(self.pointer_bridge.close)
+            self.overlay.apply_visual_plan(plan)
+            self.log.write("Visual plan applied; source=response.")
+        except (RuntimeError, ValueError, OSError):
+            self.log.write("Visual rendering failed; textual answer retained.")
+        return True
 
     def _session_mode_changed(self, mode) -> None:
         self.session.mode = mode
 
     @Slot()
     def release_capture(self):
+        self._cancel_ai()
         if self.interaction is not None:
             self.interaction.reset()
             self._voice_state("Gata", False)
@@ -205,6 +356,9 @@ class DesktopController(QObject):
         if self._closed or self.window is None:
             return
         panel = self.window.session_panel
+        if self._ai_pending:
+            panel.feedback.setText("Așteaptă răspunsul AI sau încheie sesiunea.")
+            return
         if self.interaction is not None:
             if self.interaction.active:
                 panel.feedback.setText("Interacțiunea vocală este în curs.")
@@ -228,16 +382,15 @@ class DesktopController(QObject):
             # Validation messages are local, never provider exception details.
             panel.feedback.setText(str(error))
             return
-        self.log.write("Typed interaction submitted; provider=unavailable.")
-        self.session.fail(request.id, "AI nu este conectat încă. Întrebarea nu a fost trimisă unui serviciu AI.")
         panel.question.clear()
         panel.render(self.session)
-        panel.feedback.setText("AI indisponibil · Întrebarea este păstrată doar în sesiunea curentă.")
+        self._submit_ai(request)
 
     @Slot()
     def end_session(self) -> None:
         if self._closed:
             return
+        self._cancel_ai()
         if self.interaction is not None:
             self.interaction.close()  # Release Ion/sounddevice's own retained audio buffers too.
         self.session.end()
@@ -254,6 +407,7 @@ class DesktopController(QObject):
     def start_capture(self) -> None:
         if self._closed or self.window is None or self.capture.pending:
             return
+        self._cancel_ai()
         if self.interaction is not None:
             if self.interaction.active:
                 return
@@ -264,6 +418,7 @@ class DesktopController(QObject):
             self._capture_failed(type(error).__name__)
             return
         self.window.capture_button.setEnabled(False)
+        self.pointer_bridge.hide()
         self._set_capture_status("Captură în 3 secunde...")
         self._overlay_was_visible = self.overlay is not None and self.overlay.isVisible()
         self._capture_hidden = True
@@ -280,6 +435,7 @@ class DesktopController(QObject):
             self.tray.set_status(status)
 
     def _capture_changed(self, frame) -> None:
+        self._cancel_ai()
         self.session.set_frame(frame)
         if self.window is not None:
             self.window.show_capture(frame)
@@ -292,7 +448,7 @@ class DesktopController(QObject):
             self._capture_hidden = False
             self.window.show()
             if (self._overlay_was_visible and self.overlay is not None
-                    and any(item.visible for item in self.overlay.annotations)):
+                    and self.overlay.has_visuals):
                 self.overlay.show()
         self.window.capture_button.setEnabled(True)
         self._set_capture_status("Gata")
@@ -314,6 +470,8 @@ class DesktopController(QObject):
         self.clear_overlay()
         try:
             self.overlay = OverlayWindow(self.window.screen())
+            self.overlay.pointer_requested.connect(self.pointer_requested.emit)
+            self.overlay.pointer_cleared.connect(self.pointer_bridge.close)
             for annotation in demo_annotations():
                 self.overlay.upsert(annotation)
             self.window.overlay_feedback.setText(
@@ -329,6 +487,7 @@ class DesktopController(QObject):
 
     @Slot()
     def clear_overlay(self) -> None:
+        self.pointer_bridge.close()
         if self.overlay is not None:
             self.overlay.close()
             self.overlay.deleteLater()
@@ -368,6 +527,7 @@ class DesktopController(QObject):
         if self._closed:
             return
         self._closed = True
+        self._cancel_ai()
         if self.hotkey is not None:
             self.hotkey.close()
         if self.interaction is not None:

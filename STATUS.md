@@ -1,55 +1,67 @@
 # Current Milestone
 
-Milestone 6 — Local OpenRouter configuration and Windows STT setup (2026-10-04). Limited to the requested setup/adapters. No commit created; stop for manual testing.
+Real OpenRouter / AI-selected VisualPlan integration in normal Jarvis, built on the existing uncommitted callout foundation. No Git commit created. Branch continue-magda began at 62c867f with the prior callout changes present; those changes were preserved/refined.
 
 # Working
 
-- Inspected clean branch continue-magda at 67ee23a, recent Python changes, OpenRouter source and every module in the owner's package. Authorized fast-forward pull from origin/main reported already up to date.
-- Local ignored .env contains empty OPENROUTER_API_KEY=. Allowlisted loader uses environment precedence and never logs the key. Tracked .env.example has no credentials.
-- Separate Python OpenRouter launcher loads local configuration and checks key/model before startup. Keeps PyQt6 out of the PySide6 Jarvis process.
-- Optional dependency groups install all owner-import/STT and companion requirements outside the owner package.
-- Explicit model download and microphone diagnostics store models outside the protected package. Jarvis discovers installed large-v3; companion discovers small and blocks its original first-use download into CursorMain.
-- Existing shell, sessions, overlay, capture, hotkey and isolated Ion transport regression tests pass.
+- Normal `python -m jarvis`: hold Ctrl+Shift+Space → real isolated Ion recording plus current-screen capture → release/transcription → actual OpenRouter multimodal request → validated answer/visual plan → existing transparent production overlay.
+- AI chooses semantic actions: none, callout, highlight, arrow, rectangle, circle, line, pointer/cursor and combinations. No keyword rules, automatic callout or production demo targets.
+- Main provider adapts the existing generic OpenRouter protocol outside CursorMain: same endpoint/auth/image/schema approach, tutoring prompt and generalized response schema. Actual live key/request/response verified. No second vendor or simulated runtime path.
+- Compact content-sized dark callouts with white wrapped text, automatic leader and target avoidance. Basic bubble collision avoidance. Stable IDs, clear/highlight/update support. Real overlay remains transparent outside requested annotations.
+- Existing GuidePointer is called unchanged through an external PyQt worker. No cursor algorithm, positioning implementation or owner file changed. One pointer target at a time.
+- Animated AI waiting status, 45-second transport timeout, 60-second overall deadline, cancellation/interruption, stale-response rejection, Romanian missing-key/auth/credit/rate/network feedback. Invalid visuals or unavailable rendering do not discard the textual answer.
+- Follow-up requests contain bounded prior answers and current visual descriptions. End Session/exit clears context/visuals and aborts transport. Display invalidation also clears pointer.
+- Main speech adapter now discovers installed small when large-v3 is absent and no explicit model override is set. Actual Ion worker reports ready on this machine. Explicit user overrides remain authoritative.
+- Normal UI remains available through --window/tray. Typed fallback now sends real requests too. Prior standalone demo remains developer-only; no additional standalone preview deliverable.
 
 # Partially Working
 
-- Device enumeration and 16 kHz mono input validation pass on this machine. Live speech recognition awaits explicit model installation and manual recording test.
-- Companion demo starts/registers shortcuts and shuts down normally. Real OpenRouter/TTS replies await your key, model and manual test.
+- Complete physical hold/speak/release exercise with a human speaking Romanian remains a manual acceptance check. Automated transport/controller tests use synthetic audio; actual model readiness and microphone format were checked separately.
+- Main-runtime TTS is not connected in this milestone. Complete answers are available in the main UI; the old separate companion retains its own TTS.
 
 # Not Implemented Yet
 
-- Jarvis's main session/AI boundary remains unconnected to OpenRouter. The existing OpenRouter companion is independent and toggle-based; this scope does not implement a unified hold-to-talk tutoring pipeline.
-- No new AI provider, TTS implementation or owner-package changes.
+- Tracking targets through scrolling/window movement, sophisticated global layout/arrow routing, streaming responses, main-runtime speech playback and automatic action execution.
 
 # Known Issues
 
-- There is no Ion-named folder in this checkout; actual owner package is CursorMain. Entire folder treated read-only.
-- No speech model installed or downloaded during this setup. check returns LocalEntryNotFoundError until installation.
-- Jarvis and companion shortcuts overlap; run one application at a time.
-- large-v3 CPU speed/memory and real Romanian transcription quality remain unmeasured.
-- Owner sources require an editable checkout, not a standalone Jarvis wheel installation.
+- Screenshot is captured near the start of recording; changing the underlying content later can make targets stale.
+- Very large targets/text can leave no safe bubble placement; visuals are then omitted while answer text remains available.
+- Bubble collision avoidance does not guarantee protection of every other callout's target or noncrossing arrows. Limited to 16 callouts / 32 inspected incoming actions.
+- Separate companion and main Jarvis have overlapping shortcuts. Run normal Jarvis only for this acceptance test.
+- Cursor source remains externally owned; API changes require adapter review. Owner source is loaded from the editable checkout with bytecode writes disabled.
 
 # How I Tested This Milestone
 
-- Installed editable .[voice,openrouter] successfully in Python 3.12.14 x64 .venv; pip check reports no broken requirements.
-- 41 Jarvis tests passed without skips, including real owner STT functions with synthetic microphone/model and new local configuration/setup guards.
-- 64 owner companion regression tests passed with -B, preventing bytecode writes.
-- Windows companion QApplication/GuideController launched in demo/mute mode, registered native shortcuts and shut down after one second. No microphone, screenshot or API request.
-- stt_setup check enumerated microphones and validated default input at 16 kHz mono. CTranslate2 imports successfully; missing model reports failure without downloading/recording.
-- OpenRouter launcher with empty key reports the exact local setup path and exits cleanly before AI/microphone startup.
-- Every file under CursorMain compared by SHA-256 against pre-change baseline: identical, including untracked files. Owner diff empty.
-- git check-ignore confirms .env rule; git ls-files -- .env prints nothing. git diff --check passes.
+- 55 Jarvis tests passed: previous shell/overlay/STT/session regressions plus hold/capture/release/transcript/provider delivery, real screenshot bytes in multimodal payload, semantic combinations, text preservation, pointer boundary, compact sizing/collision avoidance, follow-up context, missing key, cancellation, timeout and late replies.
+- 64 frozen companion regression tests passed with -B. Dependency check passed.
+- Real OpenRouter request using the configured key and a generated equation image succeeded. The AI independently returned two callout actions; the normal controller accepted the actual response and created the production overlay. No private desktop content was sent in this network check.
+- Native pointer adapter ran the existing GuidePointer process, indicated a target, hid and shut down with zero errors.
+- Normal background Jarvis startup: actual STT warmup ready=True; idle capture=False; idle AI request=None. No microphone recording during this startup check.
+- Full read-only CursorMain/Ion SHA-256 baseline remained identical. No owner source or cursor implementation changed. git diff --check passed.
 
 # How You Can Test It
 
-Follow README's copy/paste installation, key setup, model download, microphone check/test and launcher commands. For real companion use small; for original Jarvis use large-v3. Speak Romanian during the explicit five-second test and verify recognized text. Exit one app before starting the other. Live key/model/microphone behavior is deliberately left to manual testing, not claimed verified.
+```powershell
+cd C:\Users\Magda\Documents\GitHub\Jarvis
+.\.venv\Scripts\python.exe -m jarvis
+```
+
+Keep the configured key in .env; installed small is sufficient. Wait for Gata, open a visible problem/document, hold Ctrl+Shift+Space, say a Romanian question, release. Expect animated processing then the AI-selected annotations on the real desktop. No blue synthetic rectangle should appear unless a highlight/rectangle was requested by the AI. Ask a follow-up; verify retained context. Ask a general question and confirm no forced callout. Ask where to click and let the AI choose pointer/arrow/highlight. Inspect full answers through tray Deschide Jarvis or --window. End Session clears visuals and pending work. Exit with Ieșire.
+
+```powershell
+.\.venv\Scripts\python.exe -m jarvis --window
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Main-runtime answers are currently textual/visual; there is no spoken answer playback in this milestone. No commit was made.
 
 # Required Configuration
 
-Python 3.12 x64, .venv, .[voice,openrouter] dependencies, Windows microphone permissions/default device, local faster-whisper model. Visual C++ x64 runtime required; CPU path needs no CUDA or external FFmpeg executable. Companion additionally needs OpenRouter key in C:\Users\Magda\Documents\GitHub\Jarvis\.env and internet for AI/TTS. README supplies exact commands and official dependency sources.
+Python 3.12 x64, .[voice,openrouter], installed local speech model, desktop microphone permission, OpenRouter API key and network/available credit. No CUDA or external FFmpeg executable. README contains copy/paste setup and exact local key handling. No secret/config value was printed or committed.
 
 # Next Milestone
 
-Wait for manual testing/commit and user direction. Do not automatically integrate AI or modify Ion.
+Stop for manual testing and commit. Follow user direction after review.
 
-READY FOR MANUAL COMMIT — MILESTONE 6
+READY FOR MANUAL TEST — CALLOUT BUBBLE

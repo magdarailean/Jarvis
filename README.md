@@ -1,48 +1,40 @@
 # Jarvis
 
-Python-only Romanian Windows assistant. Two independent applications currently exist: Jarvis's PySide6 tray app prepares screen/voice context but does not call AI; the owner's PyQt6 companion uses OpenRouter for voice, screenshot guidance, pointing, captions and Romanian TTS. Run one at a time; shortcuts overlap. The owner's package is named CursorMain in this checkout (no Ion folder exists). It is read-only.
+Python-only Romanian Windows desktop tutor. **Normal Jarvis now connects push-to-talk to OpenRouter and the production transparent overlay.** The AI chooses zero or more visual actions semantically; no keyword rules or automatic explanation bubble. CursorMain/Ion are read-only.
 
-## Installation on Windows 10/11 x64
+## Install
 
-Use Python 3.12 **64-bit**, with pip/venv. Install it first if `py -3.12` is unavailable. PowerShell:
+Windows 10/11, Python 3.12 x64, microphone. In PowerShell:
 
 ```powershell
 cd C:\Users\Magda\Documents\GitHub\Jarvis
-# Create only if .venv does not exist:
+# Only if .venv does not exist:
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 .\.venv\Scripts\python.exe -m pip install -e ".[voice,openrouter]"
 .\.venv\Scripts\python.exe -m pip check
 ```
 
-If activation is blocked by execution policy, skip activation: these commands explicitly use the environment's Python. Base shell alone: `python -m pip install -e .`. The combined install above includes all Ion/STT and companion requirements; **no additional install inside CursorMain is needed**. Editable checkout installation is required; owner sources are not packaged in the Jarvis wheel.
+Activation is optional; skip it if execution policy blocks it. These commands use the venv executable directly. Base desktop uses PySide6-Essentials; voice adds sounddevice, NumPy, faster-whisper, google-genai and mss (the last two are imports required by the frozen owner module, not services called by STT). The openrouter extra supplies PyQt6 for the existing cursor process, plus the separate companion's edge-tts dependency. No additional install inside CursorMain is needed.
 
-STT dependencies: sounddevice, NumPy, faster-whisper (CTranslate2, PyAV, Hugging Face dependencies). Jarvis's owner module also imports google-genai and mss, although the adapter never calls Gemini/capture; no Google key is needed. Companion dependencies additionally include PyQt6 and edge-tts. PySide6 and PyQt6 stay in separate processes.
-
-CPU/int8 is used. No CUDA, cuDNN, NVIDIA GPU, PyTorch or PyAudio is required. No separate FFmpeg executable is required: [PyAV bundles FFmpeg libraries](https://github.com/SYSTRAN/faster-whisper). sounddevice's Windows pip wheel bundles PortAudio. [CTranslate2 requires the Visual C++ runtime](https://opennmt.net/CTranslate2/installation.html). If missing or DLL imports fail, install Microsoft's x64 redistributable:
+CPU/int8 recognition needs no CUDA, NVIDIA GPU, PyTorch or separate FFmpeg executable. [PyAV bundles FFmpeg](https://github.com/SYSTRAN/faster-whisper); sounddevice's Windows wheel bundles PortAudio. [CTranslate2 requires the Visual C++ x64 runtime](https://opennmt.net/CTranslate2/installation.html). If DLL imports fail, install it:
 
 ```powershell
 Invoke-WebRequest https://aka.ms/vc14/vc_redist.x64.exe -OutFile "$env:TEMP\jarvis-vc-redist.x64.exe"
 Start-Process -FilePath "$env:TEMP\jarvis-vc-redist.x64.exe" -ArgumentList '/install','/passive','/norestart' -Wait
 ```
 
-The installer may request administrator approval. [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). Current-machine CTranslate2 imports succeed, but do not assume the runtime exists on another machine. Windows Settings → Privacy / Privacy & security → Microphone: enable microphone access and desktop application access. Select the intended default input in Windows Sound settings.
+The installer may request elevation. Enable Windows microphone access for desktop apps and choose the intended default input in Windows Sound settings.
 
-## Local OpenRouter key
+## Local configuration
 
-File created: **C:\Users\Magda\Documents\GitHub\Jarvis\.env**.
-
-```powershell
-notepad .env
-```
-
-Paste the key immediately after the equals sign on the existing line:
+Key file: **C:\Users\Magda\Documents\GitHub\Jarvis\.env**. On a fresh clone copy `.env.example` to `.env`. Paste the key after the equals sign:
 
 ```dotenv
 OPENROUTER_API_KEY=your-key-here
 ```
 
-Save and restart the companion. To change it, replace the value; to remove it, leave `OPENROUTER_API_KEY=` empty. No source changes. On a fresh clone copy `.env.example` to `.env`; the template must stay empty. Existing process environment variables override the file; clear a shell override with `Remove-Item Env:OPENROUTER_API_KEY -ErrorAction SilentlyContinue`.
+To change/remove the key, replace/empty that value and restart Jarvis. No source edits. Existing environment variables override the file. Optional settings: OPENROUTER_MODEL (default google/gemini-2.5-flash-lite), JARVIS_ION_MODEL (local model directory or cached model name), JARVIS_SPEECH_MODEL (separate companion). JARVIS_HOTKEY can be set in the shell (default Ctrl+Shift+Space).
 
 ```powershell
 git check-ignore -v -- .env
@@ -50,58 +42,63 @@ git check-ignore -v -- .env
 git ls-files -- .env
 ```
 
-Verified: `.gitignore` ignores `.env` and the file is not tracked. Ordinary Git add excludes it; do not force-add secrets. Optional allowed settings: OPENROUTER_MODEL, JARVIS_ION_MODEL, JARVIS_SPEECH_MODEL. Model overrides can point to existing faster-whisper/CTranslate2 directories, not PyTorch .pt files.
+Secrets and models are ignored. Never force-add .env. Network requests use your OpenRouter account and may incur charges. The provider uses OpenRouter's [structured output protocol](https://openrouter.ai/docs/guides/features/structured-outputs), with local validation as well.
 
-## Explicit model installation
-
-Internet, disk space and sufficient RAM are required; large-v3 occupies several GB and may be slow on CPU. Downloads go into ignored repository `models\stt`, **outside CursorMain**:
+## Speech model
 
 ```powershell
-# Original Jarvis/Ion default:
-.\.venv\Scripts\python.exe -m jarvis.stt_setup download --model large-v3
-# OpenRouter companion default:
 .\.venv\Scripts\python.exe -m jarvis.stt_setup download --model small
-```
-
-Download whichever model you need, or both. Jarvis uses local-files-only loading: **no first-use download**. The original companion's lazy SpeechEngine downloads on first transcription into CursorMain/models; our launcher requires a local model directory instead, preserving the read-only package. Downloaded defaults are discovered automatically; model environment/.env overrides take precedence.
-
-## Verify microphone and Romanian recognition
-
-```powershell
-# Lists devices, checks 16 kHz mono support, loads local model; no recording:
 .\.venv\Scripts\python.exe -m jarvis.stt_setup check --model small
-# Explicit five-second recording; speak Romanian, read printed transcription:
+# Records five seconds ONLY when you run this explicit test:
 .\.venv\Scripts\python.exe -m jarvis.stt_setup test --model small
 ```
 
-Use `--model large-v3` to check Jarvis's default. Append `--device N` using the printed device index for diagnostics; application input uses Windows's default device. A missing model/device/dependency returns failure. Empty text is not successful recognition: check input level, device and permissions. Audio remains in memory; no files, screenshots or AI calls in this diagnostic.
+Models download explicitly into ignored `models\stt`, outside CursorMain. The main adapter uses installed large-v3 when present; if no explicit JARVIS_ION_MODEL override is set and large-v3 is absent, it uses the installed small model. Otherwise it tries the cached large-v3 name with local-files-only loading. It never downloads during activation. For the larger/slower CPU model: `python -m jarvis.stt_setup download --model large-v3`. An explicit override is always respected.
 
-## Launch and manual tests
+## Normal use — real AI integration
 
 ```powershell
 .\.venv\Scripts\python.exe -m jarvis
-# Optional diagnostics:
+# Open the retained main UI immediately:
 .\.venv\Scripts\python.exe -m jarvis --window
 ```
 
-After warmup, hold Ctrl+Shift+Space, speak Romanian, release. Expect Ascult…, Procesez…, then **Context pregătit · AI neconectat**. This app stops at the AI boundary. Recording has a ten-second maximum. Tray End Session clears context, Ieșire exits. Typed input cannot produce AI responses yet; overlay demo and manual capture are diagnostic options.
+1. Wait for **Gata**. Open an exercise, document or application.
+2. Hold **Ctrl+Shift+Space**, wait for **Ascult...**, speak Romanian, then release. Maximum recording is ten seconds.
+3. Jarvis transcribes locally and sends the question, one real screen capture, bounded conversation history and existing visual descriptions to OpenRouter.
+4. **Pregătesc explicația...** animates while waiting. The AI returns Romanian text plus its chosen visual plan.
+5. Callouts, arrows, highlights and shapes render over the real application. There are no artificial target rectangles unless the AI requested a rectangle/highlight. A callout's own leader is automatic; no full-screen opaque background is painted.
+6. `pointer/cursor` invokes the existing GuidePointer through an external process adapter. CursorMain, the pointer drawing and its point_at behavior are unchanged.
+7. Read the complete answer using tray **Deschide Jarvis**. Follow-up questions include prior answers and current visuals. Callouts reveal text quickly (up to 1.2 seconds), expire about 20 seconds after appearing/updating, and clear immediately on the next accepted push-to-talk activation. Other annotations keep their existing lifecycle. Pressing the shortcut during an AI request cancels it and starts another interaction.
+8. **Încheie sesiunea** clears context/annotations and stops pending work. **Ieșire** exits.
 
-Exit Jarvis first, then:
+The typed panel also sends real questions, with its last manually captured screen when available. Missing keys, failed requests and timeouts produce Romanian feedback. Invalid visual actions do not discard a valid answer. No-action responses add no visuals; existing conversation annotations are retained. Main-runtime TTS is not connected in this milestone; full answers are shown in the retained main UI. The old separate companion has its own TTS, but is not the normal Jarvis path.
 
-```powershell
-# Demo: no key/model/microphone/network:
-.\.venv\Scripts\python.exe -m jarvis.openrouter --demo --mute
-# Real companion after key/model setup:
-.\.venv\Scripts\python.exe -m jarvis.openrouter
-```
+No idle recording, screenshot stream, automatic clicking or screenshot archive. The screenshot is taken near recording start; moving/scrolling the application afterwards can make an annotation stale. Geometry/DPI changes clear stale overlays. Internet is needed for AI requests; a 45-second transport timeout and 60-second overall deadline bound requests. No automatic paid retries.
 
-Ctrl+Space toggles voice activation/recording (this companion is **not hold-to-talk**). Ctrl+Shift+Space refreshes context; Escape cancels; Ctrl+Shift+Q exits. Ask a Romanian question about the visible interface and verify pointer, caption and speech. `--mute` disables TTS. Real requests send screenshots and transcribed questions to OpenRouter; TTS also needs network. Default AI model: google/gemini-2.5-flash-lite. Account billing/availability apply. Missing key/model is reported before startup. This setup does not merge the companion into Jarvis's tutoring/session pipeline.
+## Cursor ownership / optional separate companion
 
-## Regression checks
+The adapter imports `CursorMain/workingVersion4.GuidePointer` in a separate PyQt process with bytecode writing disabled. It calls the existing public point_at API using the same normalized-to-monitor mapping as the companion. No mouse automation, new accuracy algorithm or owner source change. One pointer target can be shown at a time.
+
+`python -m jarvis.openrouter` still launches the older independent companion, not the main Jarvis flow. Run only one: global shortcuts overlap. Use `python -m jarvis` for this milestone.
+
+## Developer verification only
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -B -m unittest discover -s CursorMain -p 'test_workingVersion*.py' -v
+# Optional retained isolated layout demo (not the production AI path):
+.\.venv\Scripts\python.exe -m jarvis.features.callouts.demo
 ```
 
--B prevents bytecode writes into the read-only package. Tests use synthetic audio/models and mocked responses; live recognition/API replies remain manual checks. No .NET implementation, database or server is required.
+The old demo uses synthetic blue targets and its own tray menu. None are imported as targets by the production response path. Production has compact content-sized callouts, safe target avoidance, basic bubble collision avoidance, stable IDs and per-action validation. If no safe placement fits, that callout is omitted while text remains available. No OCR/scroll tracking or arrow-crossing optimization yet.
+
+## Temporary, selective callouts
+
+The AI prompt explicitly prefers the smallest useful plan, normally zero to three short callouts (often one), and allows more only when the question genuinely needs simultaneous comparison of more sources. This is semantic guidance, not keyword routing or a hard three-item truncation. The full answer remains in conversation history after a callout expires.
+
+Manual check: run normal Jarvis, ask about a visible item, observe the fast progressive text, and wait about 20 seconds without further interaction. The callout and its leader disappear. Ask again, then start another voice request while the bubble is appearing: the old callout should vanish immediately. Existing highlights/shapes and cursor behavior should be unaffected by this callout-only cleanup. Repeated requests, removal or ending the session during animation must not crash.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_callout_timing.py -v
+```

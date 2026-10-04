@@ -117,7 +117,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.contexts[0].frame.id, "fixture")
         self.assertIs(self.session.pending, self.contexts[0])
         self.assertIn(("Procesez...", False), self.states)
-        self.assertEqual(self.states[-1], ("Context pregătit · AI neconectat", False))
+        self.assertEqual(self.states[-1], ("Context pregătit", False))
         self.voice.transcribed.emit(token, "duplicate")
         self.assertEqual(len(self.contexts), 1)
 
