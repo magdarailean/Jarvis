@@ -63,6 +63,17 @@ def load_ion(path):
     return module
 
 
+class SpeechOnlyModel:
+    """Keep Ion's API while filtering silence and avoiding repeated-text loops."""
+
+    def __init__(self, model):
+        self.model = model
+
+    def transcribe(self, audio, **options):
+        return self.model.transcribe(audio, **dict(options, vad_filter=True,
+                                                   condition_on_previous_text=False))
+
+
 def main():
     protocol = sys.stdout
     sys.stdout = sys.stderr  # Ion's print() is never protocol or application logging.
@@ -75,8 +86,10 @@ def main():
 
     try:
         ion = load_ion(Path(sys.argv[1]))
-        model = ion.WhisperModel(os.environ.get("JARVIS_ION_MODEL", "large-v3"),
-                                 device="cpu", compute_type="int8", local_files_only=True)
+        from jarvis.local_config import load_local_config, speech_model
+        load_local_config()
+        model = SpeechOnlyModel(ion.WhisperModel(speech_model("JARVIS_ION_MODEL", "large-v3"),
+                                 device="cpu", compute_type="int8", local_files_only=True))
     except Exception as error:
         emit("error", code=type(error).__name__)
         return 1

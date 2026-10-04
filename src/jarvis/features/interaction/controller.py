@@ -4,10 +4,10 @@ from jarvis.features.screen_capture.session import CaptureSession
 
 
 class InteractionController(QObject):
-    """One hold at a time. Never calls AI. Late speech results require a matching token."""
+    """One hold at a time. Emits context to the AI composition root."""
 
     state_changed = Signal(str, bool)  # Romanian state, microphone actually active
-    prepared = Signal(object)  # TutorRequest: future AI consumer boundary
+    prepared = Signal(object)  # TutorRequest dispatched by the composition root.
     failed = Signal(str)
     capture_started = Signal()
     capture_finished = Signal()
@@ -101,6 +101,9 @@ class InteractionController(QObject):
         if not text.strip():
             self._fail("Nu am auzit o întrebare. Ține apăsată comanda rapidă și încearcă din nou.")
             return
+        if not any(character.isalnum() for character in text):
+            self._fail("Nu am recunoscut cuvinte în înregistrare. Verifică microfonul și repetă comanda.")
+            return
         if self._frame is None and not self.capture.pending:
             self._fail("Activarea a fost prea scurtă. Încearcă din nou.")
             return
@@ -118,8 +121,8 @@ class InteractionController(QObject):
         self.context = request
         self.active = False
         self._text = None
+        self.state_changed.emit("Context pregătit", False)
         self.prepared.emit(request)
-        self.state_changed.emit("Context pregătit · AI neconectat", False)
 
     def _fail(self, message):
         self.reset()

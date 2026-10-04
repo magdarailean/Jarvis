@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from jarvis.features.overlay import Annotation
 from jarvis.features.screen_capture import ScreenFrame
+from jarvis.features.interaction.intent import route_intent
 
 
 class AssistantMode(Enum):
@@ -33,6 +34,10 @@ class TutorRequest:
     history: tuple[Turn, ...]
     frame: ScreenFrame | None = field(repr=False)
     annotations: tuple[Annotation, ...] = ()
+
+    @property
+    def visual_intent(self):
+        return route_intent(self.question)
 
 
 class Session:

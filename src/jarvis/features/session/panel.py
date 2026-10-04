@@ -21,8 +21,8 @@ class SessionPanel(QFrame):
         title.setObjectName("Strong")
         layout.addWidget(title)
         notice = QLabel(
-            "AI nu este conectat încă. Întrebările sunt păstrate temporar în această sesiune, "
-            "fără răspunsuri generate. Când AI va fi conectat, va folosi ultima captură disponibilă."
+            "Întrebarea, istoricul conversației și ultima captură disponibilă sunt trimise către OpenRouter. "
+            "Răspunsurile și explicațiile vizuale rămân în sesiunea curentă."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
@@ -68,7 +68,7 @@ class SessionPanel(QFrame):
             elif turn.notice is not None:
                 blocks.append(f"Stare serviciu\n{turn.notice}")
         if session.pending is not None:
-            blocks.append(f"Tu\n{session.pending.question}\n\nContext pregătit pentru AI · AI neconectat")
+            blocks.append(f"Tu\n{session.pending.question}\n\nPregătesc explicația...")
         self.history.setPlainText("\n\n".join(blocks))
         self.history.verticalScrollBar().setValue(self.history.verticalScrollBar().maximum())
         self.feedback.setText(f"{len(session.turns)} / {Session.MAX_TURNS} schimburi în memorie.")

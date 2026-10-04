@@ -117,7 +117,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.contexts[0].frame.id, "fixture")
         self.assertIs(self.session.pending, self.contexts[0])
         self.assertIn(("Procesez...", False), self.states)
-        self.assertEqual(self.states[-1], ("Context pregătit · AI neconectat", False))
+        self.assertEqual(self.states[-1], ("Context pregătit", False))
         self.voice.transcribed.emit(token, "duplicate")
         self.assertEqual(len(self.contexts), 1)
 
@@ -158,6 +158,17 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.capture.calls, 0)
         self.assertEqual(self.contexts, [])
         self.assertFalse(self.pipeline.active)
+
+    def test_punctuation_hallucination_never_reaches_ai(self):
+        token = self.activate()
+        self.capture.deliver()
+        errors = []
+        self.pipeline.failed.connect(errors.append)
+        self.voice.transcribed.emit(token, ')' * 200)
+        self.assertEqual(self.contexts, [])
+        self.assertIsNone(self.session.pending)
+        self.assertFalse(self.pipeline.active)
+        self.assertIn('Nu am recunoscut cuvinte', errors[0])
 
     def test_unconfigured_voice_does_not_start_capture_or_recording(self):
         self.voice.available = False
