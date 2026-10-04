@@ -24,18 +24,19 @@ from jarvis.features.interaction.guide import GuideSession
 from jarvis.features.interaction.desktop import StatusIndicator, foreground_screen
 from jarvis.features.callouts.model import VisualPlan
 from jarvis.features.ai.openrouter import OpenRouterProvider
+from jarvis.features.speech.service import SpeechService
 from jarvis.infrastructure.pointer_bridge import PointerBridge
 
 
 class DesktopController(QObject):
     activation_requested = Signal()
     pointer_requested = Signal(object)  # Cursor teammate's consumer boundary.
-    answer_ready = Signal(str)  # Text survives visual failures; future TTS consumer.
+    answer_ready = Signal(str)  # Full answer survives visual failures.
 
     def __init__(self, app: QApplication, *, instance_key: str | None = None,
                  tray_factory=TrayIcon, log: AppLog | None = None, enable_voice=False,
                  background=False, voice_only=False, voice_factory=IonAdapter, hotkey_factory=GlobalHotkey,
-                 provider_factory=OpenRouterProvider) -> None:
+                 provider_factory=OpenRouterProvider, speech_factory=SpeechService) -> None:
         super().__init__()
         self.app = app
         self.instance_key = instance_key
@@ -46,6 +47,13 @@ class DesktopController(QObject):
         self.instance: SingleInstance | None = None
         self.overlay: OverlayWindow | None = None
         self.session = Session()
+        self.speech = speech_factory(self)
+        self._speech_callouts = []
+        self._speech_enabled = False
+        self.speech.preparing.connect(lambda: self._speech_state("Pregătesc vocea..."))
+        self.speech.started.connect(lambda: self._speech_state("Vorbesc..."))
+        self.speech.finished.connect(self._speech_finished)
+        self.speech.failed.connect(self._speech_failed)
         self.guide = GuideSession(self)
         self.guide_capture = CaptureSession(self)
         self.guide.changed.connect(self._guide_input)
@@ -109,6 +117,7 @@ class DesktopController(QObject):
             self.close()
             return False
 
+        self._speech_enabled = True
         if not self.voice_only:
             self.window = MainWindow()
             self.window.setWindowIcon(create_icon())
@@ -177,6 +186,9 @@ class DesktopController(QObject):
     def _push_to_talk(self):
         if self._closed or self.interaction.active or self.capture.pending:
             return
+        self._release_speech_callouts()
+        self.speech.stop()
+        self.log.write("Speech stopped for push-to-talk.")
         self._guide_stop()
         if self.overlay is not None:
             self.overlay.clear_temporary_callouts()
@@ -303,6 +315,40 @@ class DesktopController(QObject):
         else:
             self._set_capture_status(text)
 
+    def _release_speech_callouts(self):
+        held, self._speech_callouts = self._speech_callouts, []
+        for timing, identifier, token in held:
+            timing.release(identifier, token, delay=5.0)
+
+    def _speak_answer(self, text, callouts=()):
+        if self._speech_enabled and not self._closed:
+            self._release_speech_callouts()
+            for item in callouts:
+                if item.temporary:
+                    timing = self.overlay.callout_timing
+                    self._speech_callouts.append((timing, item.id, timing.hold(item.id)))
+            self.speech.say(text)
+
+    def _speech_state(self, status):
+        if not self._closed:
+            self._ai_status(status)
+            self.log.write("Speech state: " + status)
+
+    def _speech_finished(self):
+        self._release_speech_callouts()
+        self.log.write("Speech playback finished.")
+        if not self._closed and not self._ai_pending and not (self.interaction and self.interaction.active):
+            self._ai_status("Gata")
+
+    def _speech_failed(self, message):
+        self.log.write("Speech failed; textual answer and visuals retained.")
+        if not self._closed:
+            self._speech_finished()
+            if self.window is not None:
+                self.window.session_panel.feedback.setText(message)
+            if self.indicator is not None:
+                self.indicator.display(message, foreground_screen(self.app))
+
     def _show_pointer(self, action):
         if self.overlay is not None:
             self.pointer_bridge.show(action, self.overlay.screen())
@@ -321,6 +367,8 @@ class DesktopController(QObject):
         self._ai_status(("Verific următorul pas" if self.guide.active else "Pregătesc explicația") + "." * (1 + self._ai_tick % 3))
 
     def _submit_ai(self, request):
+        self._release_speech_callouts()
+        self.speech.stop()
         if request.guide_context is None and self.guide.active:
             self._guide_stop()
         if request.visual_intent == VisualIntent.GUIDE and not self.guide.active and request.frame is not None:
@@ -393,7 +441,7 @@ class DesktopController(QObject):
             self.session.fail(identifier, "Răspunsul AI nu a putut fi acceptat.")
             if self.window is not None:
                 self.window.session_panel.render(self.session)
-        if not was_guiding and not self.guide.active:
+        if not was_guiding and not self.guide.active and not self.speech.busy:
             self._ai_status("Gata" if accepted else "Eroare")
         self.log.write(f"AI response received; request={identifier}; accepted={accepted}.")
 
@@ -419,7 +467,8 @@ class DesktopController(QObject):
         if self.window is not None:
             self.window.session_panel.render(self.session)
         self.answer_ready.emit(plan.text)
-        self._set_capture_status("Gata")
+        if not self.speech.busy:
+            self._set_capture_status("Gata")
         if (not self.guide.active and request.visual_intent == VisualIntent.AUTO
                 and request.frame is not None
                 and any(a.kind.value == "pointer/cursor" for a in plan.actions)):
@@ -429,6 +478,7 @@ class DesktopController(QObject):
             plan = VisualPlan.parse(payload, intent=VisualIntent.GUIDE, require_grounding=True)
             payload = {**payload, "guide_status": "next"}
         if self.guide.active:
+            self._speak_answer(plan.text)  # GUIDE has a spoken instruction, not a callout.
             if not self._guide_result(payload, plan):
                 return True
         if request.visual_intent == VisualIntent.EXPLAIN:
@@ -455,6 +505,12 @@ class DesktopController(QObject):
                 self.overlay.pointer_requested.connect(self.pointer_requested.emit)
                 self.overlay.pointer_cleared.connect(self.pointer_bridge.close)
             self.overlay.apply_visual_plan(plan)
+            callout_ids = {a.id for a in plan.actions if a.kind.value == "callout"}
+            displayed = [item for item, _ in self.overlay.displayed_callouts()
+                         if item.id in callout_ids]
+            spoken = "\n\n".join(item.text for item in displayed)
+            if spoken:
+                self._speak_answer(spoken, displayed)
             self.log.write("Visual plan applied; source=response.")
         except (RuntimeError, ValueError, OSError):
             if self.guide.active:
@@ -512,6 +568,8 @@ class DesktopController(QObject):
     def end_session(self) -> None:
         if self._closed:
             return
+        self._release_speech_callouts()
+        self.speech.stop()
         self._guide_stop()
         self._cancel_ai()
         if self.interaction is not None:
@@ -651,6 +709,7 @@ class DesktopController(QObject):
             return
         self._guide_stop()
         self._closed = True
+        self.speech.close()
         self._cancel_ai()
         if self.hotkey is not None:
             self.hotkey.close()
