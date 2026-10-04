@@ -1,134 +1,88 @@
-# Current Part
+# Current Milestone
 
-## Cursor accuracy review on test
+Immediate click dismissal of temporary visual assistance in the real runtime. Existing pointer guidance and EXPLAIN callout behavior preserved. Existing TTS/callout behavior preserved; no commit created.
 
-Latest regression follow-up: user reports the generic localization warning instead
-of a previously working Google target. Removed crop refinement from the launcher,
-restoring the earlier full-image locator while keeping completion/loop protections.
-The screenshot alone cannot identify the exact cause because all failures formerly
-shared one message. Added distinct safe diagnostics for absent targets, HTTP,
-network, invalid responses and internal errors. No fallback to planner guesses.
-27 focused tests pass, including a real worker regression check proving a tiny
-full-image target needs only one locator call and cannot be vetoed by crop refinement.
-Live desktop retest remains required. Owner source unchanged; no commits.
+# Working
 
-Current follow-up: user confirmed improved location but reported relaunch/repeat
-loops while browser windows load and after goals are achieved. Added explicit
-goal state/evidence, stable control/effect identities, completed/failed-cycle
-guards, up to two delayed loading snapshots, and a clear Gata completion response.
-The magnified crop refinement introduced in that follow-up is now disconnected
-from normal launches; see the regression follow-up above.
-These changes are confined to the outside-owner adapter, tests and documentation.
-Shared docs changed in this follow-up: STATUS, ARCHITECTURE, CURSOR_TARGETING.
-Real browser/Canva accuracy still requires manual testing; no live API charges,
-audio or desktop captures were used in tests. Branch remains test; no commits.
+- Left/right click clears temporary callouts and their leaders, speech caption and pointer, stops speech, and cancels outstanding visual holds. This also works outside GUIDE, without starting automatic screen capture. GUIDE still captures after release/settling for the next step. Persistent annotations are preserved.
 
-Current validation: 25 focused tests passed (17 cursor/credential/progress tests
-plus eight targeting tests). Qt integration covers bounded loading rechecks,
-pending evidence retention, completion cleanup and stale-result rejection.
-Refinement tests cover landscape/portrait transforms, cancellation and conflicting
-locations. Launcher help, owner-folder diff and whitespace checks passed.
+- GUIDE now displays the exact spoken text in a separate caption. Status updates do not overwrite it. It remains through speech plus five seconds, then hides; click/next-step/PTT clears it immediately. Cursor guidance remains independent.
 
-Key-loading follow-up: added `--prompt-key` for hidden input in the same Python
-process and startup key validation before hotkeys. `--check-key` performs an
-optional read-only authentication request, with sanitized errors. Five focused
-credential tests cover startup propagation, invalid input and request/error
-handling. Missing-key CLI behavior was verified locally; no live key was supplied
-or real authentication request made. No owner files or credentials were changed.
+- “Ajuta-ma cum sa fac o prezentare in canva” now routes to GUIDE instead of AUTO. Creation requests for editable artifacts share this routing; homework/recipe requests are not classified by the generic verb “fac” alone. AI chooses target geometry from the actual screen.
 
-Added an outside-owner launcher with 1920-pixel image limit, independent structured
-target localization, strict coordinate validation and fail-closed pointing. Includes
-an offline nine-point alignment check. See [CURSOR_TARGETING.md](CURSOR_TARGETING.md).
-Main shell and CursorMain source remain unchanged. Live Canva accuracy needs manual
-retesting; no paid requests or real microphone/capture used by automated tests.
-No commits created. Stop here for manual review after verification.
+- GUIDE pointer is held during TTS, then hidden after five seconds. Click/PTT clears it immediately and cancels the old timer. Expiry preserves the active goal and click observer. Speech failure also releases the pointer after five seconds.
+- Navigation variants such as “Cum pot închide site-ul?” and “Cum să-l închid?” route to GUIDE. Provider instructions prioritize the spoken task over unrelated screenshot content.
 
-Manual follow-up: the user reports correct button names but incorrect positions
-with the adapter. Changed the locator contract from pixels to Gemini's documented
-0..1000 `[ymin, xmin, ymax, xmax]` convention. This addresses a plausible scale
-mismatch; the actual failed response was not available to prove it. Added an
-opt-in screenshot/rectangle inspector so the next failure can be distinguished
-from cursor mapping. No extra API requests were added by this revision.
+- Explicit arată-mi/arata-mi/unde wins over explanation terms. Active GUIDE survives PTT follow-ups unless the user explicitly requests an explanation. The dispatched request and pending response-validation request share the same GUIDE context.
 
-Validation: eight targeting tests and one isolated integration test passed. The
-integration check exercises Ion's real worker with fake transport, malformed
-planner repair, crop mapping and nine actual pointer animation endpoints using
-Qt's offscreen platform, plus preview painting, aspect ratio and cleanup before
-capture/cancellation. Launcher help and `git diff --check` passed. CursorMain
-has no diff. Physical monitor alignment and paid-model accuracy remain manual.
+- Online edge-tts Romanian Alina synthesis and in-memory audio playback through a cancellable isolated worker.
+- TTS reads exactly the final rendered callout text, in painting order for multiple callouts. No separate longer spoken answer. Existing bubble text selection is preserved.
+- GUIDE keeps cursor instructions and routing. EXPLAIN keeps callouts/typewriter.
+- Preparing/speaking/ready states; PTT interrupts speech without waiting and preserves conversation history.
+- Spoken bubbles remain during synthesis/playback and expire five seconds after speech finishes or fails; typewriter timing is unchanged. Romanian Alina speaks at +10% rate. New PTT clears temporary callouts as before.
+- Speech errors/timeouts retain answer and visuals. No Ion or CursorMain changes.
 
-## Previous shell milestone
+# Partially Working
 
-**Part 5 — Background push-to-talk through the AI boundary.** Implemented 2026-10-04; ready for code/manual review. No commits created. Stop after this part for the user's review/commit.
+- Physical hold/speak/release, human assessment of Romanian pronunciation and GUIDE cursor acceptance remain manual checks.
+- TTS is online and depends on the Edge speech service being available.
 
-`git pull --ff-only` confirmed the branch was up to date at `6ca704b`. The working tree was initially clean. Inspected all owner additions, project docs, session/capture/overlay and lifecycle flow before editing. Ion's merged folder is named `CursorMain`, not `Ion`; the entire folder was treated as read-only and has no diff.
+# Not Implemented Yet
 
-# Implemented
+- Offline TTS and configurable voice selection.
 
-- Normal application entry starts in the background, with tray and small input-transparent status indicator. `--window` opens diagnostics. No main-window opening, typing or capture button is needed for the voice path.
-- Native global **Ctrl+Shift+Space** hold/release activation; configurable through `JARVIS_HOTKEY`. Registration conflicts are visible. Auto-repeat is suppressed; release checks run only during a hold. Key registration is cleaned up at exit.
-- Outside-owner Ion adapter, running in an isolated process. Uses the actual `record_voice()` and `transcribe_voice(model, audio)` functions in `workingVersion1.py`. No competing recognizer, PyQt6 cursor import, Gemini client or AI request.
-- Ion sounddevice recording begins only after activation. Release stops it early; Ion's existing ten-second maximum remains. The unused buffer tail is trimmed by elapsed time, pending an exact sample-count API from the owner.
-- Actual microphone start triggers **Ascult...** and one automatic capture of the foreground application's monitor. Jarvis surfaces hide briefly; the main window stays hidden afterward. **Procesez...** follows recording stop.
-- Transcript and screenshot are combined with session history, mode and annotation snapshot into `TutorRequest`. `InteractionController.prepared` / `.context` is the explicit future-AI boundary. The indicator shows **Context pregătit · AI neconectat**. No AI implemented.
-- Serialized interactions, startup/transcription watchdogs, silence/error feedback, cancellation, display invalidation and stale-result rejection. End Session/exit clear image/conversation/overlay and terminate the worker to release audio buffers.
-- Typed input, manual capture and overlay demo remain optional diagnostic tools. Tray End Session is available without opening diagnostics.
+# Known Issues
 
-# Environment / Important Remaining Setup
+- Multiple spoken bubbles remain together until the combined utterance finishes, then expire together five seconds later.
+- Existing single-callout selection may expand a bubble to the full explanation. Speech follows the resulting visible text exactly.
+- Normal startup uses the existing voice-only background interface.
 
-- Installed optional `.[voice]` dependencies in `.venv`: sounddevice, faster-whisper, google-genai and mss plus their dependencies. PyQt6 was not installed by this work.
-- **No Whisper model found/downloaded.** The model-download/local-path question remains unanswered. The adapter uses local-files-only loading, default `large-v3`; set `JARVIS_ION_MODEL` to an existing faster-whisper/CTranslate2 model directory or cached model name.
-- Therefore live microphone-to-transcript behavior is **not verified**, and this machine cannot transcribe until the model is supplied. Missing setup produces a Romanian error, not a fake answer or idle recording.
-- The owner module imports Google/mss even though Jarvis does not call those services. No API key is needed for this pipeline.
+# Incoming main milestone verification (reported before merge)
 
-# Validation
+- 101 tests passed (including an actual five-second Qt timer expiry): click dismissal outside GUIDE, real GUIDE mouse-sampling callback cleanup and next-step settling, GUIDE caption text equality, survival through speaking/ready status, real five-second caption expiry and PTT cleanup, exact Canva phrase, pointer-only provider schema, controller delivery, rejected bubble response and preserved creation goal after a click, pointer speech lifetime, click/PTT timer cancellation, next-step replacement, speech failure, mixed keyword priority, GUIDE schema restriction, actual controller voice-follow-up routing, rejection of AI callouts in GUIDE, click invalidation/capture, multi-step progression and completion evidence, plus TTS and overlay regressions.
+- No CursorMain or Ion files changed. Pointer positioning/implementation remains unchanged; accuracy still depends on AI identifying the correct visible target.
+- Live Canva/microphone acceptance remains manual; automated checks use the real controller/provider payload path with simulated AI responses.
+- Previous native startup check encountered hotkey registration failure under sandbox; unrestricted startup exited through the single-instance gate. No claim of a new live microphone/AI acceptance run. Restart the existing Jarvis instance for manual validation.
 
-- Full Windows suite: **36 tests passed**, no skips. Focused interaction tests also pass after final native-event and preview cleanup changes.
-- Real Win32 hotkey registration, conflict detection, posted WM_HOTKEY dispatch through Qt, repeat suppression, release and unregistration. Physical keyboard operation in another application still needs manual verification.
-- Real QProcess transport with fake Ion fixture: readiness, recording start, release, stopped/text events and forced cancellation. No microphone used.
-- Imported the actual read-only owner module and called its recorder with a fake sounddevice plus its transcription function with a fake model. Verified Romanian options and joined text. Confirmed source bytes unchanged.
-- Simulated full hold → capture → release → transcript → prepared context, both capture/transcript completion orders, duplicate/late responses, silence, missing configuration, screen invalidation, background startup and shutdown.
-- Prior shell, capture, overlay and session regression tests passed. `pip check`, syntax compilation and `git diff --check` pass. Owner-folder diff is empty.
-- No desktop screenshots or real speech were collected for automated testing. AI was never called.
+# How You Can Test It
 
-# Manual Review
-
-Read README's Part 5 setup first. With an installed model:
+Exit existing Jarvis through its tray, then run:
 
 ```powershell
-$env:JARVIS_ION_MODEL = 'C:\path\to\faster-whisper-large-v3'
 .\.venv\Scripts\python.exe -m jarvis
 ```
 
-Wait for **Gata**. Work in another application, hold **Ctrl+Shift+Space**, wait for **Ascult...**, speak Romanian, then release. Confirm **Procesez...** followed by **Context pregătit · AI neconectat**. Open diagnostics only if you want to inspect text/preview. Verify foreground-monitor selection, no Jarvis surfaces in capture, unchanged application focus, early release, the ten-second limit, silence, repeated presses, End Session and exit.
+Hold Ctrl+Shift+Space and say “Ajuta-ma cum sa fac o prezentare in canva” while Canva is visible. Release: expect cursor guidance, no bubble. Click the indicated control; expect the old pointer to disappear and a fresh-screen next step. Try “Și acum?” through PTT: GUIDE should persist. Try the mixed request “Arată-mi butonul și explică-mi ce face”: GUIDE wins. “Explică-mi acest buton” explicitly exits GUIDE. Click while a bubble is visible or being read: it and its leader must disappear immediately and speech must stop. Repeat outside GUIDE; no automatic next request should occur. Wait through the guidance speech: its complete text must be visible in a separate caption, alongside cursor guidance. Caption and pointer remain through speech and disappear five seconds later. Click before or after expiry to continue; the next pointer gets its own lifetime. New PTT must hide it immediately. Continue until the requested task is visibly complete.
 
-Opening diagnostics during active voice work cancels it. End Session/cancellation kills the worker when needed; a following press can warm it up without recording. Wait for **Gata**, then press again. Transcription quality/latency, physical microphone behavior and mixed-monitor compositor timing remain manual checks.
+# Required Configuration
 
-# ION REVIEW
+Python 3.12 Windows environment with existing voice/openrouter extras, local STT model, microphone permission, OpenRouter key and internet. edge-tts and PyQt6 are already declared in the openrouter extra. No additional TTS key, environment variable or model download.
 
-Detailed owner report: [ION_REVIEW.md](ION_REVIEW.md).
+# Next Milestone
 
-- High: fixed-duration recorder has no start/stop handle or exact returned sample count. Owner should expose explicit recording lifecycle.
-- High: large-v3 CPU loading/transcription has no exposed cancellation/readiness contract; latency/memory are unmeasured. Owner should expose configuration and lifecycle.
-- Medium: voice module imports AI/capture dependencies; publish a focused, import-safe STT API.
-- Medium: cursor uses PyQt6 rather than Jarvis's PySide6; agree on a compatible public interface.
-- Medium: some demo scripts execute prompts/network/file capture at import time; owner should add guarded entry points.
-- Medium: owner code is outside the Jarvis wheel; define packaging or configure `JARVIS_ION_SOURCE` for external installs.
+Stop for manual testing and user commit. No further development until instructed.
 
-No owner fixes were made.
+# Cursor adapter retained from test
 
-# Shared Files Changed
+The independent `python -m jarvis.cursor_guide --prompt-key` entry point remains
+available alongside the newly merged main-app flow. Its full-image locator uses a
+1920-pixel image limit and 0..1000 `[ymin, xmin, ymax, xmax]` coordinates, followed by
+the existing Ion pointer movement. Experimental crop refinement is disabled after
+manual regression feedback. Completion/repeat protection, bounded loading
+rechecks, calibration, optional target inspection and key diagnostics remain.
 
-- `src/jarvis/app.py`: background entry, composition, statuses, activation/capture cleanup and prepared context display.
-- `src/jarvis/presentation/main_window.py`: correct normal-flow/privacy instructions.
-- `src/jarvis/infrastructure/tray.py`: truthful microphone status.
-- `src/jarvis/features/session/panel.py`: pending prepared-context display.
-- `pyproject.toml`: optional owner-import dependencies.
-- README/ARCHITECTURE/STATUS and new ION_REVIEW documentation.
-- New isolated packages: `features/hotkey`, `features/voice_input`, `features/interaction`; new tests and synthetic fixture outside the owner folder.
+The last adapter verification reported 27 focused tests passing before this merge;
+this is not a claim that the merged application's combined suite has been rerun.
+Live cursor accuracy remains a manual acceptance check. Earlier implementation
+history and owner issues are documented in [CURSOR_TARGETING.md](CURSOR_TARGETING.md)
+and [ION_REVIEW.md](ION_REVIEW.md). The old Part 5 'AI not connected' status is
+superseded for the normal main application by the incoming milestone above.
 
-# Boundary / Next Work
+# Documentation merge resolution
 
-No AI provider, TTS, cursor rewrite or owner STT changes. Next review should configure the local speech model and exercise physical push-to-talk/recording/foreground capture on Windows, then address owner-reported contracts collaboratively. Do not implement AI until the user authorizes that next scope.
-
-READY FOR MANUAL REVIEW — PART 5; LIVE SPEECH REQUIRES LOCAL MODEL
+Resolved README, STATUS and ARCHITECTURE on `test`, preserving the incoming runtime
+instructions and the separate cursor adapter's documentation. No application,
+cursor, targeting or owner source was edited during conflict resolution. Test
+commands/results above belong to their respective pre-merge milestones; this
+resolution checks documentation and Git conflict state only. No commit created.
+The requested cursor/location integration review remains separate work.

@@ -1,11 +1,12 @@
 """In-memory conversation ownership and response identity checks; no I/O or Qt."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from uuid import uuid4
 
 from jarvis.features.overlay import Annotation
 from jarvis.features.screen_capture import ScreenFrame
+from jarvis.features.interaction.intent import route_intent, VisualIntent
 
 
 class AssistantMode(Enum):
@@ -33,6 +34,12 @@ class TutorRequest:
     history: tuple[Turn, ...]
     frame: ScreenFrame | None = field(repr=False)
     annotations: tuple[Annotation, ...] = ()
+
+    guide_context: dict | None = None
+
+    @property
+    def visual_intent(self):
+        return VisualIntent.GUIDE if self.guide_context is not None else route_intent(self.question)
 
 
 class Session:
@@ -67,7 +74,7 @@ class Session:
         self._pending = None
         self._frame = frame
 
-    def begin(self, question: str, annotations: tuple[Annotation, ...] = ()) -> TutorRequest:
+    def begin(self, question: str, annotations: tuple[Annotation, ...] = (), *, guide_context=None) -> TutorRequest:
         if self._pending is not None:
             raise RuntimeError("A turn is already pending")
         if not isinstance(question, str) or not question.strip():
@@ -83,10 +90,17 @@ class Session:
         request = TutorRequest(
             uuid4().hex, self.id, question.strip(), self.mode,
             tuple(turn for turn in self._turns if turn.explanation is not None),
-            self._frame, annotations,
+            self._frame, annotations, guide_context,
         )
         self._pending = request
         return request
+
+    def set_guide_context(self, request_id, context):
+        """Keep dispatched routing and response validation on the same request."""
+        if not self._matches(request_id):
+            raise ValueError("Request is no longer pending")
+        self._pending = replace(self._pending, guide_context=context)
+        return self._pending
 
     def complete(self, request_id: str, explanation: str) -> bool:
         if not self._matches(request_id):

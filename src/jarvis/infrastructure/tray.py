@@ -27,22 +27,23 @@ def create_icon() -> QIcon:
 
 
 class TrayIcon:
-    def __init__(self, reopen: Callable[[], None], exit_app: Callable[[], None]) -> None:
+    def __init__(self, reopen: Callable[[], None] | None, exit_app: Callable[[], None]) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():
             raise RuntimeError("System tray unavailable.")
         self.menu = QMenu()
         self.status_action = self.menu.addAction("Gata · Microfon oprit")
         self.status_action.setEnabled(False)
         self.menu.addSeparator()
-        self.open_action = self.menu.addAction("Deschide Jarvis")
+        self.open_action = self.menu.addAction("Deschide Jarvis") if reopen else None
         self.exit_action = self.menu.addAction("Ieșire")
-        self.open_action.triggered.connect(reopen)
+        if self.open_action is not None:
+            self.open_action.triggered.connect(reopen)
         self.exit_action.triggered.connect(exit_app)
         self.icon = QSystemTrayIcon(create_icon())
         self.icon.setToolTip("Jarvis — Gata · Microfon oprit")
         self.icon.setContextMenu(self.menu)
         self.icon.activated.connect(
-            lambda reason: reopen() if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None
+            lambda reason: reopen() if reopen and reason == QSystemTrayIcon.ActivationReason.DoubleClick else None
         )
         self.icon.show()
 

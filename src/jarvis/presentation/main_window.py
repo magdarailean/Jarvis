@@ -99,7 +99,8 @@ class MainWindow(QWidget):
         privacy_layout.addWidget(text(
             "În repaus nu se înregistrează nimic. Activarea vocală pornește microfonul "
             "și o singură captură de ecran. Eliberarea oprește microfonul. "
-            "Contextul rămâne în memorie; nu este trimis către AI."
+            "Întrebarea, captura și istoricul sunt trimise către OpenRouter pentru răspuns. "
+            "Captura nu este salvată pe disc."
         ))
         card_layout.addWidget(privacy)
         body.addWidget(card)
@@ -130,7 +131,7 @@ class MainWindow(QWidget):
         body.addWidget(text(
             "Arată forme și un pas numerotat pe monitorul acestei ferestre. "
             "Poți apăsa și scrie în aplicațiile de sub adnotări. Formele sunt exemple fixe; "
-            "răspunsurile AI, comanda rapidă și explicațiile vocale nu sunt disponibile încă.", "Muted"
+            "Acest buton este doar pentru verificarea formelor; răspunsurile AI folosesc planul vizual ales de model.", "Muted"
         ))
         self.overlay_demo_button = QPushButton("Arată demonstrația")
         self.overlay_demo_button.clicked.connect(self.overlay_demo_requested.emit)
