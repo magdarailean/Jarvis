@@ -156,6 +156,44 @@ class GuideTests(unittest.TestCase):
         self.c.pointer_bridge.show.assert_called_once()
         self.assertEqual(self.c.overlay.callouts, ())
 
+    def test_new_voice_goal_replaces_canva_and_next_click_keeps_new_goal(self):
+        self.goal = 'Ajută-mă să fac o prezentare în Canva.'
+        first = self.start()
+        self.c.provider.succeeded.emit(first.id, answer(text='Apasă Prezentare în Canva.'))
+        self.c.guide.waits = 2
+        self.c.interaction = Mock(active=False)
+        self.c._push_to_talk()
+        self.c.session.set_frame(self.frame)
+        new_goal = 'Arată-mi cum să deschid internetul.'
+        self.c._voice_prepared(self.c.session.begin(new_goal))
+        request = self.c.provider.sent[-1][0]
+        self.assertEqual(request.guide_context['original_goal'], new_goal)
+        self.assertEqual(request.guide_context['previous_step'], '')
+        self.assertFalse(request.guide_context['screen_unchanged'])
+        self.assertEqual(self.c.guide.waits, 0)
+        self.assertEqual(self.c.session.pending, request)
+        context = json.loads(build_payload(request, [], 'model')['messages'][1]['content'][0]['text'])
+        self.assertEqual(context['guide_session']['original_goal'], new_goal)
+        self.c.pointer_bridge.show.reset_mock()
+        self.c.provider.succeeded.emit(first.id, answer())
+        self.c.pointer_bridge.show.assert_not_called()
+        self.c.provider.succeeded.emit(request.id, answer(text='Deschide browserul.'))
+        self.c._guide_input()
+        self.c._guide_frame(self.frame)
+        next_request = self.c.provider.sent[-1][0]
+        self.assertEqual(next_request.question, new_goal)
+        self.assertEqual(next_request.guide_context['previous_step'], 'Deschide browserul.')
+
+    def test_unrelated_auto_request_does_not_inherit_active_guide(self):
+        first = self.start()
+        self.c.provider.succeeded.emit(first.id, answer())
+        self.c.session.set_frame(self.frame)
+        self.c._voice_prepared(self.c.session.begin('Care este capitala Franței?'))
+        request = self.c.provider.sent[-1][0]
+        self.assertIsNone(request.guide_context)
+        self.assertEqual(request.visual_intent, VisualIntent.AUTO)
+        self.assertFalse(self.c.guide.active)
+
     def test_canva_creation_is_pointer_only_and_continues_after_click(self):
         self.goal = 'Ajuta-ma cum sa fac o prezentare in canva.'
         first = self.start()

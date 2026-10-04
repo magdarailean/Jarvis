@@ -6,6 +6,15 @@ Python 3.12 x64 / PySide6 desktop, Windows 10/11. Domain/session models are inde
 
 Global shortcut hold → isolated read-only Ion recorder + one Qt screen capture → release → Romanian local STT → TutorRequest → DesktopController → asynchronous OpenRouterProvider → validated VisualPlan → session text + existing OverlayWindow. Requests include bounded history and current annotation/callout descriptions. Replies require a current request ID; cancellation, session end and stale context prevent late application.
 
+New spoken requests inherit an active GUIDE goal only when the entire normalized
+utterance matches a contextual follow-up in `interaction/intent.py`. Otherwise
+the controller stops the old observer, clears its prior step/loading state and
+routes the new question normally. New GUIDE requests start their own goal;
+click-driven rechecks retain their explicit guide context. Conversation history
+is retained, with provider instructions that old tasks cannot override the active
+goal. This is bounded phrase matching, not a general semantic intent classifier;
+unrecognized follow-up wording is sent as a fresh request with history.
+
 `features/ai/openrouter.py` adapts the generic endpoint/auth/multimodal/strict JSON protocol from the owner's request_openrouter function into a PySide QtNetwork transport. It does not import the cursor companion or modify its provider. Its schema/prompt are for tutoring and VisualPlan, rather than the companion's cursor-specific decision format. One request, no paid retries, bounded response, 45-second inactivity timeout and controller 60-second deadline. No credentials/content logged. HTTP auth/credit/rate errors and malformed responses have Romanian feedback. Environment/.env configuration is unchanged.
 
 ## AI-selected visuals
@@ -29,3 +38,43 @@ Ion uses the existing isolated worker and model functions; only outside-owner mo
 ## Limits and verification
 
 Main-runtime speech uses replaceable `features/speech/SpeechService`, injected into DesktopController. A cancellable QProcess runs edge-tts Romanian Alina plus PyQt audio playback with in-memory audio. PyQt remains isolated from the main PySide UI. Speech starts after visual application, using only rendered callout text in the painter's order; GUIDE retains its spoken instruction. Spoken temporary callouts suspend expiry while synthesis/playback runs. Completion/failure releases them with a five-second deadline. Identity tokens prevent stale releases from affecting replaced/removed callouts; reveal timing is unchanged. Unspoken callouts retain their fallback lifetime. Romanian Alina uses +10% rate. PTT kills the worker without waiting; process identity rejects stale events. Timeouts/errors preserve visuals and history. The older companion's TTS remains separate. Captures are monitor-based and may become stale after scroll/window movement. Basic bubble collision avoidance does not optimize all arrows or protect every other callout's target. Tests cover request construction, hold/release delivery, validation, cancellation, timeout, history, transparency and rendering failure. Live provider, native pointer and normal STT warmup are tested separately without recording private audio. Optional developer callout demo is never part of the normal request flow.
+
+## Optional cursor accuracy adapter retained on test
+
+`python -m jarvis.cursor_guide` runs Ion's version 4 prototype in a separate PyQt6
+process, outside the PySide6 shell. `features/targeting/grounding.py` adds a
+framework-independent location request after planning and maps validated
+`[ymin, xmin, ymax, xmax]` bounds on the explicit 0..1000 scale to normalized
+screenshot coordinates. Optional `--inspect-target` shows only the latest encoded
+image with both rectangles, clears on cancellation and hides before capture.
+The owner still handles cropping,
+monitor mapping, pointer animation, speech and request lifetime. The launcher
+adapts the owner module in memory without editing CursorMain. Calibration uses
+the real owner pointer on a synthetic grid. See CURSOR_TARGETING.md for coupling,
+privacy, request costs and remaining accuracy limitations.
+
+`targeting/progress.py` extends only the runtime planner contract with goal-state
+evidence and control/effect identities. It intercepts loading responses without
+consuming pending click evidence, schedules at most two rechecks through the
+owner's existing single-shot settle timer, and blocks repeated effects independently
+of exact screenshot hashes. Completion still requires model evidence and honest
+pending-action verification. Experimental `refinement.py` is no longer connected
+to the launcher after a reported rejection regression. Normal location uses the
+full image only. Fixed diagnostic categories distinguish absent targets from
+transport or response-validation failures without exposing request/response data.
+No changes to owner source, STT, the main PySide6 shell, or idle capture behavior.
+
+This adapter remains a separate entry point. The main runtime's VisualPlan
+provider now shares `targeting/grounding.build_location_payload` and
+`normalized_bounds` through `ai/pointer_location.py`. After the unchanged planning
+request, an eligible pointer triggers a second cancellable Qt network request:
+the same captured image, aspect-preserving JPEG at maximum edge 1920 and quality
+85, and the pointer instruction without the planner's guessed coordinates.
+Only the pointer target is replaced. Other visuals, explanation text, GUIDE
+completion/loading decisions and existing confidence validation remain unchanged.
+Location failures omit the pointer while retaining the answer. Both phases share
+the existing overall request deadline; cancellation releases context and rejects
+late replies. No crop refinement or new screenshot acquisition is introduced.
+The pointer bridge still calls Ion's original `point_at` animation and maps the
+normalized target center into the captured monitor's logical geometry exactly
+once. Speech, captions, click dismissal and pointer expiry remain unchanged.

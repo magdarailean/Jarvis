@@ -7,7 +7,7 @@ Python-only Romanian Windows desktop tutor. **Normal Jarvis now connects push-to
 Windows 10/11, Python 3.12 x64, microphone. In PowerShell:
 
 ```powershell
-cd C:\Users\Magda\Documents\GitHub\Jarvis
+# Run from your Jarvis repository directory.
 # Only if .venv does not exist:
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -28,7 +28,7 @@ The installer may request elevation. Enable Windows microphone access for deskto
 
 ## Local configuration
 
-Key file: **C:\Users\Magda\Documents\GitHub\Jarvis\.env**. On a fresh clone copy `.env.example` to `.env`. Paste the key after the equals sign:
+Key file: **`.env` in the repository root**. On a fresh clone copy `.env.example` to `.env`. Paste the key after the equals sign:
 
 ```dotenv
 OPENROUTER_API_KEY=your-key-here
@@ -78,7 +78,7 @@ No idle recording, screenshot stream, automatic clicking or screenshot archive. 
 
 ## Cursor ownership / optional separate companion
 
-The adapter imports `CursorMain/workingVersion4.GuidePointer` in a separate PyQt process with bytecode writing disabled. It calls the existing public point_at API using the same normalized-to-monitor mapping as the companion. No mouse automation, new accuracy algorithm or owner source change. One pointer target can be shown at a time.
+The adapter imports `CursorMain/workingVersion4.GuidePointer` in a separate PyQt process with bytecode writing disabled. It calls the existing public point_at API using the same normalized-to-monitor mapping as the companion. One pointer target can be shown at a time. Before displaying an eligible pointer, the main provider now uses the earlier cursor adapter's independent full-image locator: JPEG at up to 1920 pixels, explicit 0..1000 bounding boxes, then normalized monitor coordinates. No crop refinement, mouse automation or owner source change. This adds one API request per pointer step; explanation-only and completed/waiting responses do not use it. A failed location retains the answer but omits the pointer.
 
 `python -m jarvis.openrouter` still launches the older independent companion, not the main Jarvis flow. Run only one: global shortcuts overlap. Use `python -m jarvis` for this milestone.
 
@@ -107,7 +107,7 @@ Manual check: run normal Jarvis, ask about a visible item, observe the fast prog
 
 Explicit `arată-mi` / `arata-mi` / `unde` requests take priority over explanation terms in the same request. GUIDE restricts AI output and local validation to pointer actions. Clicks hide the previous pointer; after the UI settles Jarvis captures a fresh screen and asks for the next action until visible completion evidence is returned. A click alone is not treated as success.
 
-PTT pauses the guide observer while listening and retains the original goal. Follow-ups such as “Și acum?” continue GUIDE. An explicit explanation-only request such as “Explică-mi acest buton” switches to EXPLAIN. Restart Jarvis after updating the checkout; an already-running process keeps its old code.
+PTT pauses the guide observer while listening. Short contextual follow-ups such as “Și acum?”, “Continuă” and “Arată-mi unde să apăs” retain the goal. A new task such as “Arată-mi cum să deschid internetul” replaces the previous goal and step, even during a Canva guide. Other wording is dispatched as a fresh request with conversation history rather than being forced into the old goal. An explicit explanation-only request such as “Explică-mi acest buton” switches to EXPLAIN. Restart Jarvis after updating the checkout; an already-running process keeps its old code.
 
 GUIDE pointers now stay visible during guidance speech and disappear five seconds after speech finishes or fails. Pointer expiry does not end the task: a subsequent click still triggers fresh-screen analysis. A click or new PTT immediately hides the old pointer and cancels its expiry timer. Next-step pointers receive a fresh speech lifetime. CursorMain and positioning are unchanged.
 
@@ -116,3 +116,26 @@ Creation requests such as “Ajută-mă cum să fac o prezentare în Canva” no
 GUIDE speech also has a separate on-screen transcript. It displays exactly the spoken instruction, remains while speech plays and for five seconds afterward, and is not replaced by the status indicator. It is cleared on new PTT or the next step. This caption accompanies cursor guidance; it does not switch the AI to EXPLAIN or change pointer targeting.
 
 Click dismissal: a left/right mouse press clears temporary callout bubbles (including their leaders), GUIDE captions and pointers, and stops old speech. Outside GUIDE this only dismisses assistance; it does not capture or send a new screen. During GUIDE, the existing settled-click flow continues to the next step. Unrelated persistent annotations are retained.
+
+## Cursor adapter retained on test
+
+The separately launched adapter from this branch is still available:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m jarvis.cursor_guide --prompt-key
+```
+
+This is separate from both normal `python -m jarvis` and `python -m jarvis.openrouter`.
+Run only one assistant at a time; their shortcuts overlap. The cursor adapter uses
+**Ctrl+Space** to start/stop speech, **Ctrl+Shift+Space** to refresh and
+**Ctrl+Shift+Q** to exit. It retains the 1920-pixel full-image locator, explicit
+0..1000 bounding-box mapping, completion/repeat checks and existing Ion animation.
+Crop refinement is disabled. The hidden key prompt is memory-only; do not assume
+this launcher loads the main application's `.env` configuration.
+
+Optional `--calibrate` tests nine pointer positions without AI; `--inspect-target`
+shows an in-memory diagnostic preview; `--check-key` checks authentication without
+a model request. See [CURSOR_TARGETING.md](CURSOR_TARGETING.md) for details, API
+costs, limitations and the adapter's owner review. The normal main-app provider
+now shares its location request and coordinate conversion. The two entry points
+retain their own speech, interface and task-progression behavior.

@@ -12,7 +12,7 @@ from jarvis.app import DesktopController, create_application
 from jarvis.features.ai.openrouter import build_payload
 from jarvis.features.callouts.layout import arrange, MAX_LEADER
 from jarvis.features.callouts.model import Callout, VisualKind, VisualPlan
-from jarvis.features.interaction.intent import normalize, route_intent, VisualIntent
+from jarvis.features.interaction.intent import normalize, route_intent, VisualIntent, is_guide_followup
 from jarvis.features.screen_capture import ScreenFrame, ScreenGeometry
 from jarvis.features.session import Session
 from jarvis.infrastructure.app_log import AppLog
@@ -30,6 +30,18 @@ def action(kind='callout'):
 
 
 class IntentTests(unittest.TestCase):
+    def test_followups_do_not_capture_new_goals(self):
+        for phrase in ('Și acum?', 'Continuă', 'Arată-mi unde să apăs.',
+                       'Nu a mers', 'Care este următorul pas?', 'Arată-mi din nou, te rog.'):
+            with self.subTest(phrase=phrase):
+                self.assertTrue(is_guide_followup(phrase))
+        for phrase in ('Arată-mi cum să deschid internetul.', 'Deschide internetul',
+                       'Și acum arată-mi Google.', 'Continuă cu altă prezentare.',
+                       'Arată-mi unde să apăs ca să deschid Telegram.'):
+            with self.subTest(phrase=phrase):
+                self.assertFalse(is_guide_followup(phrase))
+        self.assertEqual(route_intent('Deschide internetul'), VisualIntent.GUIDE)
+
     def test_normalized_romanian_and_explicit_precedence(self):
         self.assertEqual(normalize('  ARATĂ-MI,   unde să APĂS?!'), 'arata mi unde sa apas')
         cases = {
