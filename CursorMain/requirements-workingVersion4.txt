@@ -1,0 +1,2 @@
+-r requirements-workingVersion3_Codex.txt
+edge-tts>=7,<8
