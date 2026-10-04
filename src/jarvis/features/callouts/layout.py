@@ -68,6 +68,23 @@ def arrange(item: Callout, width: float, height: float, occupied=(), protected=(
         bubble_height = math.ceil(doc.size().height()) + 2 * PAD
         if bubble_height > area.height():
             continue
+        if target is None and occupied:
+            # Keep a general explanation beside its companion, without implying
+            # a screen target or drawing an invented leader.
+            for companion in reversed(occupied):
+                positions = (
+                    (companion.left(), companion.bottom() + 12),
+                    (companion.left(), companion.top() - bubble_height - 12),
+                    (companion.right() + 12, companion.top()),
+                    (companion.left() - bubble_width - 12, companion.top()),
+                )
+                for px, py in positions:
+                    nearby = QRectF(
+                        min(max(px, screen.left()), screen.right() - bubble_width),
+                        min(max(py, screen.top()), screen.bottom() - bubble_height),
+                        bubble_width, bubble_height)
+                    if screen.contains(nearby) and not any(nearby.intersects(r) for r in obstacles):
+                        return CalloutLayout(nearby, None, None, None, doc)
         center = target.center() if target is not None else QPointF(
             screen.right()-bubble_width/2, screen.top()+bubble_height/2)
         x = min(max(center.x() - bubble_width/2, area.left()), area.right()-bubble_width)

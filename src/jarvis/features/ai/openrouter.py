@@ -59,7 +59,21 @@ answer under 12000 characters and each callout under 2000 characters.
 Never execute actions or claim to click. Return only the specified JSON object.
 """
 INTENT_PROMPTS = {
-    VisualIntent.GUIDE: """CURSOR GUIDANCE ONLY. Identify the next visible control
+    VisualIntent.GUIDE: """CURSOR GUIDANCE ONLY. You are completing the original user goal over multiple
+screens. guide_session retains that goal and the previous instruction. Never
+switch to explanation/callouts. Analyze THIS screenshot afresh, not a predicted
+screen. A click (including a wrong click) does not prove progress. If unchanged,
+reconsider the target or the required double-click. Never blindly advance.
+Return guide_status next with exactly one pointer for the CURRENT next action;
+text briefly says what the user should do (including double-click when needed).
+Return wait and no actions only while a visible loading/transition is underway.
+Return blocked and no actions if context is missing, the user must supply a file
+name, or no safe next target can be found. Explain what is needed in text.
+Return complete and no actions ONLY when the final goal is visibly satisfied,
+with specific visible proof in completion_evidence (e.g. the requested document
+is open in an editor, not merely selected in a file picker). For every other
+status completion_evidence is empty. Do not execute any click or keystroke.
+Identify the next visible control
 needed to perform the user's requested action. Return at most one pointer/cursor
 action with its actual visible bounds. No callouts or other annotation kinds.
 Explain the next action briefly in text. If the goal is already satisfied or no
@@ -137,10 +151,16 @@ def build_payload(request, visuals, model):
         actions["maxItems"] = 1 if intent == VisualIntent.GUIDE else 2
         actions["items"]["properties"]["type"]["enum"] = [
             VisualKind.POINTER.value if intent == VisualIntent.GUIDE else VisualKind.CALLOUT.value]
+    if intent == VisualIntent.GUIDE:
+        schema["required"] += ["guide_status", "completion_evidence"]
+        schema["properties"]["guide_status"] = {"type": "string", "enum": ["next", "wait", "complete", "blocked"]}
+        schema["properties"]["completion_evidence"] = {"type": "string"}
     context = {"question": request.question,
                "visual_intent": intent.value,
                "history": [{"question": t.question, "answer": t.explanation} for t in request.history],
                "current_visuals": visuals}
+    if request.guide_context is not None:
+        context["guide_session"] = request.guide_context
     content = [{"type": "text", "text": json.dumps(context, ensure_ascii=False)}]
     if request.frame is not None:
         content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," +

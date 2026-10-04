@@ -163,7 +163,7 @@ class OverlayWindow(QWidget):
         protected = [QRectF(t[0]*self.width(), t[1]*self.height(),
                             (t[2]-t[0])*self.width(), (t[3]-t[1])*self.height())
                      for item in self.callouts if item.visible and (t := item.target) is not None]
-        for item in self.callouts:
+        for item in sorted(self.callouts, key=lambda item: item.target is None):
             if item.visible:
                 layout = arrange(item, self.width(), self.height(), occupied, protected)
                 if layout is not None:

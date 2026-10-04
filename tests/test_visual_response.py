@@ -65,7 +65,7 @@ class VisualResponseTests(unittest.TestCase):
         self.assertFalse(self.controller.accept_ai_response(request.id, {'text': 'Late'}))
         self.assertEqual(len(self.answers), 1)
 
-    def test_combinations_and_pointer_boundary(self):
+    def test_auto_pointer_starts_exclusive_guide_session(self):
         pointers = []
         self.controller.pointer_requested.connect(pointers.append)
         actions = [{'type': kind, 'id': kind, 'target': [.1, .2, .3, .4],
@@ -74,7 +74,8 @@ class VisualResponseTests(unittest.TestCase):
         actions.append({'type': 'pointer/cursor', 'id': 'pointer', 'target': [.5, .5, .6, .6],
                         'target_text': 'Open', 'target_confidence': .95})
         self.respond(actions)
-        self.assertEqual(len(self.controller.overlay.annotations), 5)
+        self.assertEqual(len(self.controller.overlay.annotations), 0)
+        self.assertTrue(self.controller.guide.active)
         self.assertEqual(len(pointers), 1)
         self.assertEqual(pointers[0].kind, VisualKind.POINTER)
         self.assertEqual(self.controller.overlay.callouts, ())

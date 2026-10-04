@@ -2,6 +2,7 @@
 
 import sys
 import os
+from dataclasses import replace
 
 from PySide6.QtCore import QLocale, QObject, Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QColor, QPalette
@@ -19,6 +20,7 @@ from jarvis.features.hotkey.windows import GlobalHotkey
 from jarvis.features.voice_input.ion_adapter import IonAdapter
 from jarvis.features.interaction.controller import InteractionController
 from jarvis.features.interaction.intent import VisualIntent
+from jarvis.features.interaction.guide import GuideSession
 from jarvis.features.interaction.desktop import StatusIndicator, foreground_screen
 from jarvis.features.callouts.model import VisualPlan
 from jarvis.features.ai.openrouter import OpenRouterProvider
@@ -44,6 +46,12 @@ class DesktopController(QObject):
         self.instance: SingleInstance | None = None
         self.overlay: OverlayWindow | None = None
         self.session = Session()
+        self.guide = GuideSession(self)
+        self.guide_capture = CaptureSession(self)
+        self.guide.changed.connect(self._guide_input)
+        self.guide.inspect.connect(self._guide_capture)
+        self.guide_capture.frame_changed.connect(self._guide_frame)
+        self.guide_capture.failed.connect(lambda _: self._guide_stop("Captura a eșuat. Repetă cererea vocală."))
         self.pointer_bridge = PointerBridge(self)
         self.pointer_requested.connect(self._show_pointer)
         self.pointer_bridge.failed.connect(self._pointer_failed)
@@ -129,7 +137,7 @@ class DesktopController(QObject):
             self._start_voice_pipeline()
         if self.window is not None and (not self.background or self.tray is None):
             self.window.show()
-        self.log.write(f"Runtime ready; voice_only={self.voice_only}; state=Ready; pid={os.getpid()}; visual_pipeline=4.")
+        self.log.write(f"Runtime ready; voice_only={self.voice_only}; state=Ready; pid={os.getpid()}; visual_pipeline=5.")
         self.instance.listen(self.activation_requested.emit)
         return True
 
@@ -169,6 +177,7 @@ class DesktopController(QObject):
     def _push_to_talk(self):
         if self._closed or self.interaction.active or self.capture.pending:
             return
+        self._guide_stop()
         if self.overlay is not None:
             self.overlay.clear_temporary_callouts()
         self._cancel_ai()
@@ -228,6 +237,66 @@ class DesktopController(QObject):
             self.window.show_capture(request.frame)
         self._submit_ai(request)
 
+    def _guide_stop(self, notice=None):
+        self.guide.stop()
+        self.guide_capture.clear(notify_finished=False)
+        self.pointer_bridge.hide()
+        if notice:
+            self._ai_status(notice)
+
+    def _guide_input(self):
+        # Any click invalidates an in-flight prediction, even outside the target.
+        self.pointer_bridge.hide()
+        self._cancel_ai()
+        self.guide_capture.clear(notify_finished=False)
+
+    def _guide_capture(self):
+        if not self.guide.active or self._closed:
+            return
+        self._guide_input()
+        if self.indicator is not None:
+            self.indicator.hide()
+        if self.overlay is not None:
+            self.overlay.hide()
+        try:
+            self.guide_capture.begin(foreground_screen(self.app), delay_ms=100)
+        except (ValueError, RuntimeError, OSError):
+            self._guide_stop("Monitorul nu este disponibil. Repetă cererea vocală.")
+
+    def _guide_frame(self, frame):
+        if frame is None or not self.guide.active or self._closed:
+            return
+        self.session.set_frame(frame)
+        context = self.guide.context(frame)
+        self.log.write(f"Guide screen rechecked; unchanged={context['screen_unchanged']}.")
+        request = self.session.begin(self.guide.goal, guide_context=context)
+        self._submit_ai(request)
+
+    def _guide_result(self, payload, plan):
+        status = payload.get("guide_status") if isinstance(payload, dict) else None
+        pointers = [a for a in plan.actions if a.kind.value == "pointer/cursor"]
+        self.log.write(f"Guide decision; status={status if status in ('next', 'wait', 'complete', 'blocked') else 'invalid'}.")
+        if (status == "complete" and payload.get("actions") == []
+                and isinstance(payload.get("completion_evidence"), str)
+                and payload["completion_evidence"].strip()):
+            self.log.write("Guide completed; visible evidence supplied.")
+            self._guide_stop("Gata")
+            return False
+        if status == "next" and len(pointers) == 1:
+            self.guide.previous_step = plan.text
+            self.guide.waits = 0
+            self._ai_status("Urmează indicatorul · " + plan.text[:240])
+            return True
+        if status == "wait" and not pointers and self.guide.wait_for_screen():
+            self._ai_status("Aștept actualizarea ecranului...")
+            return False
+        # Keep the goal while awaiting a user correction; do not spend requests
+        # indefinitely on loading screens or invent an unsafe next target.
+        self.pointer_bridge.hide()
+        self.guide.settle.stop()
+        self._ai_status("Ghidare în așteptare · " + (plan.text[:240] or "Corectează ecranul sau repetă cererea vocală."))
+        return False
+
     def _ai_status(self, text):
         if self.indicator is not None:
             self._voice_state(text, False)
@@ -239,6 +308,8 @@ class DesktopController(QObject):
             self.pointer_bridge.show(action, self.overlay.screen())
 
     def _pointer_failed(self, message):
+        if self.guide.active:
+            self._guide_stop()
         self.log.write("Pointer adapter unavailable; answer retained.")
         if self.window is not None:
             self.window.session_panel.feedback.setText(message)
@@ -247,9 +318,16 @@ class DesktopController(QObject):
 
     def _animate_ai(self):
         self._ai_tick += 1
-        self._ai_status("Pregătesc explicația" + "." * (1 + self._ai_tick % 3))
+        self._ai_status(("Verific următorul pas" if self.guide.active else "Pregătesc explicația") + "." * (1 + self._ai_tick % 3))
 
     def _submit_ai(self, request):
+        if request.guide_context is None and self.guide.active:
+            self._guide_stop()
+        if request.visual_intent == VisualIntent.GUIDE and not self.guide.active and request.frame is not None:
+            self.guide.start(request.question)
+            if self.overlay is not None:
+                self.overlay.clear_temporary_callouts()
+            request = replace(request, guide_context=self.guide.context(request.frame))
         self._ai_pending = request.id
         self.log.write(f"visual.intent = {request.visual_intent.value}")
         if request.visual_intent == VisualIntent.EXPLAIN:
@@ -292,6 +370,7 @@ class DesktopController(QObject):
         if self._closed or identifier != self._ai_pending:
             return
         self._stop_ai_timers()
+        self._guide_stop()
         if self.session.fail(identifier, message):
             if self.window is not None:
                 self.window.session_panel.render(self.session)
@@ -306,12 +385,16 @@ class DesktopController(QObject):
         if self._closed or identifier != self._ai_pending:
             return
         self._stop_ai_timers()
+        was_guiding = self.guide.active
         accepted = self.accept_ai_response(identifier, payload)
         if not accepted:
+            if was_guiding:
+                self._guide_stop("Răspunsul nu a putut fi verificat. Repetă cererea vocală.")
             self.session.fail(identifier, "Răspunsul AI nu a putut fi acceptat.")
             if self.window is not None:
                 self.window.session_panel.render(self.session)
-        self._ai_status("Gata" if accepted else "Eroare")
+        if not was_guiding and not self.guide.active:
+            self._ai_status("Gata" if accepted else "Eroare")
         self.log.write(f"AI response received; request={identifier}; accepted={accepted}.")
 
     @Slot(str, object)
@@ -337,9 +420,20 @@ class DesktopController(QObject):
             self.window.session_panel.render(self.session)
         self.answer_ready.emit(plan.text)
         self._set_capture_status("Gata")
+        if (not self.guide.active and request.visual_intent == VisualIntent.AUTO
+                and request.frame is not None
+                and any(a.kind.value == "pointer/cursor" for a in plan.actions)):
+            # Semantic AUTO may select a cursor too; lock all following steps to GUIDE.
+            self.guide.start(request.question)
+            self.guide.context(request.frame)
+            plan = VisualPlan.parse(payload, intent=VisualIntent.GUIDE, require_grounding=True)
+            payload = {**payload, "guide_status": "next"}
+        if self.guide.active:
+            if not self._guide_result(payload, plan):
+                return True
         if request.visual_intent == VisualIntent.EXPLAIN:
             self.pointer_bridge.hide()
-        if self.overlay is not None and request.visual_intent != VisualIntent.AUTO:
+        if self.overlay is not None and (self.guide.active or request.visual_intent != VisualIntent.AUTO):
             self.overlay.clear_temporary_callouts()
         if request.frame is None or not any(action.kind.value != "none" for action in plan.actions):
             return True
@@ -350,6 +444,8 @@ class DesktopController(QObject):
                            geometry.logical_width, geometry.logical_height)
                        and abs(screen.devicePixelRatio()-geometry.device_pixel_ratio) < .001), None)
         if screen is None:
+            if self.guide.active:
+                self._guide_stop("Monitorul s-a schimbat. Repetă cererea vocală.")
             self.log.write("Visual plan skipped; captured display no longer matches.")
             return True
         try:
@@ -361,6 +457,8 @@ class DesktopController(QObject):
             self.overlay.apply_visual_plan(plan)
             self.log.write("Visual plan applied; source=response.")
         except (RuntimeError, ValueError, OSError):
+            if self.guide.active:
+                self._guide_stop("Indicatorul nu a putut fi afișat. Repetă cererea vocală.")
             self.log.write("Visual rendering failed; textual answer retained.")
         return True
 
@@ -414,6 +512,7 @@ class DesktopController(QObject):
     def end_session(self) -> None:
         if self._closed:
             return
+        self._guide_stop()
         self._cancel_ai()
         if self.interaction is not None:
             self.interaction.close()  # Release Ion/sounddevice's own retained audio buffers too.
@@ -550,6 +649,7 @@ class DesktopController(QObject):
     def close(self) -> None:
         if self._closed:
             return
+        self._guide_stop()
         self._closed = True
         self._cancel_ai()
         if self.hotkey is not None:

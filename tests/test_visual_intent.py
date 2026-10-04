@@ -128,7 +128,8 @@ class RuntimeVisualTests(unittest.TestCase):
                 c._submit_ai(request)
                 actions = [action() | {'id': str(i)} for i in range(5)]
                 actions += [action('pointer/cursor'), action('arrow')]
-                c._ai_complete(request.id, {'text': 'Soluțiile sunt 2 și 3.', 'actions': actions})
+                c._ai_complete(request.id, {'text': 'Soluțiile sunt 2 și 3.', 'actions': actions,
+                                            'guide_status': 'next', 'completion_evidence': ''})
                 self.assertEqual(c.overlay.annotations, ())
                 if expected == 'explain':
                     self.assertEqual(len(c.overlay.callouts), 2)

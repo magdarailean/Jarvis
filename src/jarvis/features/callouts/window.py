@@ -87,7 +87,7 @@ class CalloutOverlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         occupied = []
-        for item in self.scene.items:
+        for item in sorted(self.scene.items, key=lambda item: item.target is None):
             if item.visible:
                 layout = arrange(item, self.width(), self.height(), occupied)
                 if layout is not None:
